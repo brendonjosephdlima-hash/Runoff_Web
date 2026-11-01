@@ -11,6 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overscroll-behavior: none; }
 html { overflow: hidden; }
 /* It's a game, not a document: no text selection while dragging, no tap flash or long-press menu on phones */
 * { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
@@ -857,6 +858,7 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 }
 .tray-hint { font-size: 10px; color: #7a8aaa; font-weight: 500; }
 .tray-cards {
+  overscroll-behavior-x: contain;
   display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px;
   scrollbar-width: thin;
 }
@@ -868,7 +870,7 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   border: 1px solid rgba(255,255,255,0.9);
   border-radius: 14px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 3px 12px rgba(0,0,0,0.08);
-  cursor: grab; user-select: none; touch-action: pan-x;
+  cursor: grab; user-select: none; touch-action: none;
   transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
 }
 .tray-card:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 #fff, 0 8px 20px rgba(0,0,0,0.14); }
@@ -1043,8 +1045,26 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   #vid-skip { bottom: 16px; right: 16px; padding: 9px 18px; font-size: 11px; }
 }
 /* Touch: tell players how to pick a card out of the scrolling tray */
-@media (pointer: coarse) { .tray-hint-desktop { display: none; } }
-@media (pointer: fine)   { .tray-hint-touch   { display: none; } }
+#tray.scrolls .tray-card { touch-action: pan-x; }
+.tray-hint-touch { display: none; }
+#tray.scrolls .tray-hint-touch { display: inline; }
+#tray.scrolls .tray-hint-desktop { display: none; }
+/* Touch screens: fit every card without scrolling (wrapping into rows if needed),
+   so touching a card is always a drag — no swipe-vs-drag guessing */
+@media (pointer: coarse) {
+  .tray-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); overflow-x: hidden; }
+  .tray-card { min-width: 0; max-width: none; overflow: hidden; } /* clip, or it counts as overflow */
+  .tray-name { hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word; } /* "Perme-able", not "Permeabl/e" */
+  .tray-cat  { flex-wrap: wrap; white-space: normal; row-gap: 1px; }
+  .tray-meta { white-space: nowrap; gap: 3px; letter-spacing: -0.02em; }
+}
+@media (pointer: coarse) and (max-width: 700px) {
+  .tray-cards { grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 5px; }
+  .tray-card { padding: 5px 5px 6px; gap: 2px; }
+  .tray-name { font-size: 9px; min-height: 22px; }
+  .tray-cat { font-size: 7px; }
+  .tray-meta { font-size: 8px; }
+}
 .howto-rotate { display: none; }
 @media (orientation: portrait) and (max-width: 700px) {
   .howto-rotate { display: block; margin-bottom: 14px; font-size: 12px; text-align: center; color: #1d4ed8; font-weight: 600; }
@@ -1157,7 +1177,7 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 <div id="tray">
   <div class="tray-head">
     <span class="tray-title">Nature-Based Solutions</span>
-    <span class="tray-hint" id="tray-hint"><span class="tray-hint-desktop">Drag a card onto a block</span><span class="tray-hint-touch">Swipe to browse · pull a card up onto a block</span></span>
+    <span class="tray-hint" id="tray-hint"><span class="tray-hint-desktop">Drag a card onto a block</span><span class="tray-hint-touch">Swipe to browse · hold or pull up a card to drag it</span></span>
   </div>
   <div class="tray-cards" id="tray-cards"></div>
 </div>
@@ -1320,6 +1340,17 @@ function updateUiScale() {
 }
 updateUiScale();
 window.addEventListener('resize', updateUiScale);
+
+// Phones: the tray covers up to a third of the screen, so the game camera frames the
+// city in the space above it (px of screen hidden at the bottom; 0 = use the full screen)
+let _viewLift = 0;
+function updateViewLift() {
+  const tray = document.getElementById('tray');
+  const shown = PHONE_QUERY.matches && tray.classList.contains('visible');
+  _viewLift = shown ? Math.max(0, window.innerHeight - tray.getBoundingClientRect().top) : 0;
+  _camDirty = true;
+}
+window.addEventListener('resize', () => updateViewLift());
 
 // ── Board geometry ────────────────────────────────────────────────
 const CELL_SIZE = 2.0; // Three.js world units per cell
@@ -1575,10 +1606,13 @@ function _updateCamera() {
   _camLX += (_tgtLX - _camLX) * L;
   _camLZ += (_tgtLZ - _camLZ) * L;
   const moved = Math.abs(_camF - pF) > 1e-4 || Math.abs(_camLX - pLX) > 1e-4 || Math.abs(_camLZ - pLZ) > 1e-4;
-  const a = window.innerWidth / window.innerHeight;
-  const f = _camF * Math.max(1, PORTRAIT_FIT / a); // portrait: zoom out until the grid fits across
+  const W = window.innerWidth, H = window.innerHeight, a = W / H;
+  // portrait: zoom out until the grid fits across; phones: also fit it into the space above the tray
+  const f = _camF * Math.max(1, PORTRAIT_FIT / a) * (H / (H - _viewLift));
   camera.left   = -f * a / 2;  camera.right  = f * a / 2;
   camera.top    =  f / 2;      camera.bottom = -f / 2;
+  if (_viewLift) camera.setViewOffset(W, H, 0, _viewLift / 2, W, H); // shifts the picture up
+  else           camera.clearViewOffset();
   camera.updateProjectionMatrix();
   camera.position.set(_camLX + _CAM_OFFSET, _CAM_OFFSET, _camLZ + _CAM_OFFSET);
   camera.lookAt(_camLX, 0, _camLZ);
@@ -3069,6 +3103,7 @@ function setState(s) {
     document.getElementById('panel-level-name').textContent = LEVEL_LABELS[_currentLevel] || '';
     trayMgr.refresh();
   }
+  updateViewLift();
 
   if (s === GS.IDLE) {
     showIntro('start');
@@ -3496,6 +3531,13 @@ const TRAY_ORDER = [
   'terracing', 'riparian', 'wetlands', 'leakingdam', 'sewersystem', 'undergroundtanks',
 ];
 
+// Break points for the long names, so narrow phone cards split them at a syllable
+// (not every browser ships a hyphenation dictionary for CSS hyphens: auto)
+const SOFT_HYPHENS = { Underground: 'Under\u00ADground', Engineered: 'Engi\u00ADneered', Permeable: 'Perme\u00ADable' };
+function softHyphenate(label) {
+  return label.replace(/\b(Underground|Engineered|Permeable)\b/g, w => SOFT_HYPHENS[w]);
+}
+
 var trayMgr = (() => {
   const cardsEl  = document.getElementById('tray-cards');
   const hintEl   = document.getElementById('tray-hint');
@@ -3525,11 +3567,13 @@ var trayMgr = (() => {
       card.innerHTML = `
         <div class="tray-swatch" style="background:${def.color}"></div>
         <div class="tray-cat">${def.cat}<span class="tray-bio" style="color:${NBS_BIO[sol] >= 0 ? '#16a34a' : '#dc2626'}">🌿 ${NBS_BIO[sol] > 0 ? '+' : ''}${NBS_BIO[sol]}</span></div>
-        <div class="tray-name">${def.label}</div>
+        <div class="tray-name">${softHyphenate(def.label)}</div>
         <div class="tray-meta"><span>💰 ${SOLUTION_COSTS[sol]}</span><span>${def.carbon > 0 ? '+' : ''}${def.carbon} t</span></div>
         <div class="tray-placed-tag"></div>
         <button class="tray-remove" title="Remove from board" style="display:none">✕</button>`;
       card.addEventListener('pointerdown', e => onDown(e, sol, card));
+      // While a card is being dragged, the finger must not scroll the tray underneath it
+      card.addEventListener('touchmove', e => { if (drag) e.preventDefault(); }, { passive: false });
       card.querySelector('.tray-remove').addEventListener('pointerdown', e => e.stopPropagation());
       card.querySelector('.tray-remove').addEventListener('click', () => {
         const key = cellOf(sol);
@@ -3540,7 +3584,14 @@ var trayMgr = (() => {
   }
 
   // Re-sync cards with the board: placed tags + affordability
+  // Only when the cards genuinely overflow does a horizontal swipe mean "scroll"
+  function updateScrolls() {
+    _trayEl.classList.toggle('scrolls', cardsEl.scrollWidth > cardsEl.clientWidth + 2);
+  }
+  window.addEventListener('resize', () => { updateScrolls(); updateViewLift(); });
+
   function refresh() {
+    updateScrolls();
     for (const card of cardsEl.children) {
       const sol = card.dataset.sol;
       const key = cellOf(sol);
@@ -3605,13 +3656,22 @@ var trayMgr = (() => {
 
   function onDown(e, sol, card) {
     if (gameState !== GS.GAME || e.button > 0) return;
-    if (e.pointerType !== 'touch') { e.preventDefault(); startDrag(e, sol, card); return; }
-    // Touch: wait to see the gesture — sideways is the browser scrolling the tray
-    // (it sends pointercancel), upward means the player is pulling the card out
-    const x0 = e.clientX, y0 = e.clientY;
+    if (e.pointerType !== 'touch' || !_trayEl.classList.contains('scrolls')) { e.preventDefault(); startDrag(e, sol, card); return; }
+    // Touch: wait to see the gesture. A flat sideways swipe is the browser scrolling
+    // the tray (it sends pointercancel); any upward pull — even steeply diagonal, toward
+    // a block off to the side — or a short press-and-hold picks the card up. Once picked
+    // up, the card's touchmove listener blocks the tray from scrolling.
+    // The hold is measured with the events' own timestamps, not a timer: on a busy
+    // phone, move events can arrive late and a timer would mistake a swipe for a hold.
+    const x0 = e.clientX, y0 = e.clientY, t0 = e.timeStamp;
+    let movedEarly = false;
+    const pick = ev => { done(); startDrag(ev, sol, card); };
     const move = ev => {
       const dx = ev.clientX - x0, dy = ev.clientY - y0;
-      if (-dy > 10 && Math.abs(dy) > Math.abs(dx)) { done(); startDrag(ev, sol, card); }
+      const held = ev.timeStamp - t0 >= 250;
+      if (!held && Math.hypot(dx, dy) > 8) movedEarly = true;   // moved straight away: not a hold
+      if (held && !movedEarly) pick(ev);                         // held still, now moving any way
+      else if (-dy > 8 && -dy > Math.abs(dx) * 0.4) pick(ev);    // upward pull, up to ~68° off vertical
     };
     const done = () => {
       window.removeEventListener('pointermove', move);
