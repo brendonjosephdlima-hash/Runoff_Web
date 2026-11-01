@@ -12,6 +12,9 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html { overflow: hidden; }
+/* It's a game, not a document: no text selection while dragging, no tap flash or long-press menu on phones */
+* { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+img { -webkit-user-drag: none; }
 body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-family: 'Neulis Sans', 'Inter', system-ui, sans-serif; }
 #canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
 
@@ -3604,6 +3607,7 @@ var trayMgr = (() => {
   }
 
   function startDrag(e, sol, card) {
+    window.getSelection()?.removeAllRanges(); // drop any selection left from before the drag
     const def = NBS_DEFS[sol];
     drag = { sol, cardEl: card, fromKey: cellOf(sol), overKey: null, overTray: false, check: null };
     card.classList.add('dragging');
