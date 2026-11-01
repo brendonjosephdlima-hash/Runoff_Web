@@ -11,6 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
+html { overflow: hidden; }
 body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-family: 'Neulis Sans', 'Inter', system-ui, sans-serif; }
 #canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
 
@@ -142,6 +143,7 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
    MAP CELL OVERLAYS
 ───────────────────────────────────────── */
 #overlays {
+  overflow: hidden; /* off-screen cell boxes must not widen the page on phones */
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 5;
 }
@@ -636,7 +638,7 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 .end-card {
   padding: 44px 56px 44px;
   gap: 0;
-  min-width: 380px; text-align: center;
+  min-width: min(380px, 92vw); text-align: center;
 }
 .end-title {
   font-size: clamp(2rem, 5vw, 3.8rem); font-weight: 900;
@@ -863,7 +865,7 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   border: 1px solid rgba(255,255,255,0.9);
   border-radius: 14px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 3px 12px rgba(0,0,0,0.08);
-  cursor: grab; user-select: none; touch-action: none;
+  cursor: grab; user-select: none; touch-action: pan-x;
   transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
 }
 .tray-card:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 #fff, 0 8px 20px rgba(0,0,0,0.14); }
@@ -998,6 +1000,46 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   #tray { left: 12px; right: 12px; }
   #summary-panel { display: none !important; }
 }
+
+/* Phones (portrait or landscape): compact corner panels, scrollable tray */
+@media (max-width: 700px), (max-height: 500px) {
+  #panel { top: 8px; left: 8px; bottom: auto; width: 132px; border-radius: 14px; }
+  .panel-header { padding: 8px 8px 6px; }
+  .panel-subtitle { font-size: 7px; }
+  #storm-timer-wrap { margin: 6px; padding: 6px; border-radius: 12px; }
+  #storm-timer-label { font-size: 7px; }
+  #stormTimer { font-size: 26px; }
+  .panel-howto { display: none; }
+  .panel-actions { margin: 0 6px 6px; gap: 4px; }
+  .panel-btn { padding: 6px 0; font-size: 8px; }
+  #metrics-panel { top: 8px; right: 8px; width: 150px; border-radius: 14px; padding-bottom: 4px; }
+  #metrics-panel .panel-section-label { padding: 6px 10px 2px; }
+  #metrics-panel .metrics { padding: 2px 8px 4px; gap: 2px; }
+  .metric-bar-label, .metric-bar-value { font-size: 8px; }
+  .metric-bar-track { height: 5px; }
+  #tray { left: 8px; right: 8px; bottom: 8px; padding: 6px 8px 8px; gap: 4px; border-radius: 14px; }
+  .tray-hint { font-size: 8px; }
+  .tray-card { flex: 0 0 84px; max-width: none; padding: 6px 7px; }
+  .tray-name { font-size: 10px; min-height: 24px; }
+  #advisor.adv-in, #budget-warning { bottom: 128px; }
+  .adv-avatar { display: none; }
+  .adv-bubble { max-width: min(300px, 88vw); margin-left: 0; }
+  #budget-warning { white-space: normal; max-width: 92vw; font-size: 11px; }
+  .landing-card { padding: 28px 22px 24px; }
+  .howto-card { padding: 22px 20px 18px; }
+  .howto-heading { font-size: 20px; margin-bottom: 12px; }
+  .howto-steps { font-size: 12px; gap: 6px; margin-bottom: 16px; }
+  .end-card { padding: 28px 20px; }
+  #lvl-name { font-size: 24px !important; white-space: normal; }
+  #vid-skip { bottom: 16px; right: 16px; padding: 9px 18px; font-size: 11px; }
+}
+/* Touch: tell players how to pick a card out of the scrolling tray */
+@media (pointer: coarse) { .tray-hint-desktop { display: none; } }
+@media (pointer: fine)   { .tray-hint-touch   { display: none; } }
+.howto-rotate { display: none; }
+@media (orientation: portrait) and (max-width: 700px) {
+  .howto-rotate { display: block; margin-bottom: 14px; font-size: 12px; text-align: center; color: #1d4ed8; font-weight: 600; }
+}
 </style>
 </head>
 <body>
@@ -1106,7 +1148,7 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 <div id="tray">
   <div class="tray-head">
     <span class="tray-title">Nature-Based Solutions</span>
-    <span class="tray-hint" id="tray-hint">Drag a card onto a block</span>
+    <span class="tray-hint" id="tray-hint"><span class="tray-hint-desktop">Drag a card onto a block</span><span class="tray-hint-touch">Swipe to browse · pull a card up onto a block</span></span>
   </div>
   <div class="tray-cards" id="tray-cards"></div>
 </div>
@@ -1120,12 +1162,12 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 
 <!-- ── VIDEO OVERLAY ─────────────────────────────────────────── -->
 <div id="vid-overlay" style="position:fixed;inset:0;z-index:9500;background:#000;display:none;">
-  <video id="vid-player" preload="auto" style="width:100%;height:100%;object-fit:cover;" playsinline></video>
+  <video id="vid-player" preload="none" style="width:100%;height:100%;object-fit:cover;" playsinline></video>
   <!-- Context video elements — buffered from page load, played in-place to avoid buffer transfer lag -->
-  <video id="ctxv-upper_left"  preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
-  <video id="ctxv-lower_left"  preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
-  <video id="ctxv-lower_right" preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
-  <video id="ctxv-upper_right" preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
+  <video id="ctxv-upper_left" preload="none" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
+  <video id="ctxv-lower_left" preload="none" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
+  <video id="ctxv-lower_right" preload="none" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
+  <video id="ctxv-upper_right" preload="none" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
   <button id="vid-skip">Skip ›</button>
 </div>
 
@@ -1155,6 +1197,7 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
       <li>Each solution can be used <b>once</b>. Drag a placed one to another block to move it, or back to the tray to remove it.</li>
       <li>Mitigate <b>50% of the runoff</b> before time runs out to beat the flood.</li>
     </ol>
+    <div class="howto-rotate">📱 Tip: turn your phone sideways for the best view</div>
     <div class="landing-buttons">
       <button class="screen-btn primary" id="btn-choose-block">Choose a block &nbsp;›</button>
     </div>
@@ -1251,6 +1294,12 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 
 <script>
 THREE.Cache.enabled = true; // browser-level GLB cache — prevents re-fetching same model
+
+// Phones get a lighter render profile: capped pixel density, smaller/harder shadows, less rain
+const IS_MOBILE  = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 768;
+const PIXEL_CAP  = IS_MOBILE ? 1.25 : 2;
+const SHADOW_RES = IS_MOBILE ? 1024 : 2048;
+const PORTRAIT_FIT = 1.4; // narrowest aspect (w/h) the camera framing was tuned for
 
 // ── Board geometry ────────────────────────────────────────────────
 const CELL_SIZE = 2.0; // Three.js world units per cell
@@ -1449,10 +1498,10 @@ function fmtL(l) {
 // ── Three.js renderer ─────────────────────────────────────────────
 const _canvas = document.getElementById('canvas');
 const renderer = new THREE.WebGLRenderer({ canvas: _canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, PIXEL_CAP));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = IS_MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.60;
 renderer.outputEncoding = THREE.sRGBEncoding;
@@ -1507,8 +1556,9 @@ function _updateCamera() {
   _camLZ += (_tgtLZ - _camLZ) * L;
   const moved = Math.abs(_camF - pF) > 1e-4 || Math.abs(_camLX - pLX) > 1e-4 || Math.abs(_camLZ - pLZ) > 1e-4;
   const a = window.innerWidth / window.innerHeight;
-  camera.left   = -_camF * a / 2;  camera.right  = _camF * a / 2;
-  camera.top    =  _camF / 2;      camera.bottom = -_camF / 2;
+  const f = _camF * Math.max(1, PORTRAIT_FIT / a); // portrait: zoom out until the grid fits across
+  camera.left   = -f * a / 2;  camera.right  = f * a / 2;
+  camera.top    =  f / 2;      camera.bottom = -f / 2;
   camera.updateProjectionMatrix();
   camera.position.set(_camLX + _CAM_OFFSET, _CAM_OFFSET, _camLZ + _CAM_OFFSET);
   camera.lookAt(_camLX, 0, _camLZ);
@@ -1526,7 +1576,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.22));
 const _sun = new THREE.DirectionalLight(0xfff0d0, 0.90);
 _sun.position.set(GRID_CX + 12, 20, GRID_CZ - 4);
 _sun.castShadow = true;
-_sun.shadow.mapSize.set(2048, 2048);
+_sun.shadow.mapSize.set(SHADOW_RES, SHADOW_RES);
 _sun.shadow.camera.left   = -12; _sun.shadow.camera.right  = 12;
 _sun.shadow.camera.top    =  12; _sun.shadow.camera.bottom = -12;
 _sun.shadow.camera.near   = 0.5; _sun.shadow.camera.far    = 80;
@@ -1701,7 +1751,7 @@ _waterPlane.visible = false;
 scene.add(_waterPlane);
 
 // ── Rain + Splash system ──────────────────────────────────────────
-const RAIN_COUNT    = 3500;
+const RAIN_COUNT    = IS_MOBILE ? 1200 : 3500;
 const RAIN_TOP_Y    = 14;
 const RAIN_STREAK   = 0.32;
 const RAIN_WIND_X   =  0.12;   // horizontal drift per unit fallen (X axis)
@@ -2011,7 +2061,8 @@ function _animate() {
   _waterPlane.position.y = waterVisY;
   _updateRainAndSplash(now);
   _updateCamera();
-  renderer.render(scene, camera);
+  // The scene is fully covered on the intro screens and during the context video — skip the draw
+  if (gameState === GS.GAME || gameState === GS.END) renderer.render(scene, camera);
 }
 
 // ── Notification card (CoC style) ────────────────────────────────
@@ -2785,18 +2836,18 @@ function _playVid(src, { loop = false, onended = null, muted = false } = {}) {
 const _ctxVids = {};
 let _activeCtxVid = null;
 
+// Online, buffering all four at page load meant ~110 MB before anyone pressed Play
+// (crippling on phones) — so only the chosen block's video is fetched, when chosen.
 (function _initCtxVids() {
-  Object.entries(LEVEL_CONTEXT_VIDEOS).forEach(([levelId, url]) => {
+  Object.keys(LEVEL_CONTEXT_VIDEOS).forEach(levelId => {
     const el = document.getElementById(`ctxv-${levelId}`);
-    if (!el) return;
-    el.src = url;
-    el.load(); // start buffering immediately at page load
-    _ctxVids[levelId] = el;
+    if (el) _ctxVids[levelId] = el;
   });
 })();
 
 function _ctxVidPlay(levelId, onended) {
   const el = _ctxVids[levelId]; if (!el) return;
+  if (!el.getAttribute('src')) { el.src = LEVEL_CONTEXT_VIDEOS[levelId]; el.load(); } // streams as it plays
   // Hide any previously active context vid
   if (_activeCtxVid && _activeCtxVid !== el) {
     _activeCtxVid.pause();
@@ -3234,6 +3285,7 @@ var levelSelectMgr = (() => {
 
   function _applyOrtho(size, target) {
     const aspect = window.innerWidth / window.innerHeight;
+    size *= Math.max(1, PORTRAIT_FIT / aspect);
     _camera.left   = -size * aspect;
     _camera.right  =  size * aspect;
     _camera.top    =  size;
@@ -3311,11 +3363,11 @@ var levelSelectMgr = (() => {
 
     const canvas = document.getElementById('lvl-canvas');
     _renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    _renderer.setPixelRatio(window.devicePixelRatio);
+    _renderer.setPixelRatio(Math.min(window.devicePixelRatio, PIXEL_CAP));
     _renderer.setSize(window.innerWidth, window.innerHeight);
     _renderer.outputEncoding = THREE.sRGBEncoding;
     _renderer.shadowMap.enabled = true;
-    _renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    _renderer.shadowMap.type = IS_MOBILE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     _renderer.toneMapping = THREE.ACESFilmicToneMapping;
     _renderer.toneMappingExposure = 0.60;
 
@@ -3326,7 +3378,7 @@ var levelSelectMgr = (() => {
     const dir = new THREE.DirectionalLight(0xfff0d0, 0.90);
     dir.position.copy(ISO_DIR);
     dir.castShadow = true;
-    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.mapSize.set(SHADOW_RES, SHADOW_RES);
     dir.shadow.bias = -0.001;
     _scene.add(dir);
     const _lvlFill = new THREE.DirectionalLight(0x8898ff, 0.18);
@@ -3533,7 +3585,25 @@ var trayMgr = (() => {
 
   function onDown(e, sol, card) {
     if (gameState !== GS.GAME || e.button > 0) return;
-    e.preventDefault();
+    if (e.pointerType !== 'touch') { e.preventDefault(); startDrag(e, sol, card); return; }
+    // Touch: wait to see the gesture — sideways is the browser scrolling the tray
+    // (it sends pointercancel), upward means the player is pulling the card out
+    const x0 = e.clientX, y0 = e.clientY;
+    const move = ev => {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      if (-dy > 10 && Math.abs(dy) > Math.abs(dx)) { done(); startDrag(ev, sol, card); }
+    };
+    const done = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', done);
+      window.removeEventListener('pointercancel', done);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', done);
+    window.addEventListener('pointercancel', done);
+  }
+
+  function startDrag(e, sol, card) {
     const def = NBS_DEFS[sol];
     drag = { sol, cardEl: card, fromKey: cellOf(sol), overKey: null, overTray: false, check: null };
     card.classList.add('dragging');
