@@ -998,8 +998,14 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 
 .end-buttons { flex-wrap: wrap; justify-content: center; }
 
+/* Screen-size scaling: the HUD was laid out for 1600×900; --ui (set from JS) scales it
+   up on big monitors and down on small laptops/tablets. Phones keep their own layout (--ui: 1).
+   zoom also scales each element's own offsets, so panels/tray/advisor keep their spacing. */
+#panel, #metrics-panel, #summary-panel, #tray, #advisor, #budget-warning,
+.landing-card, .end-card, #vid-skip, .lvl-controls { zoom: var(--ui, 1); }
+
 @media (max-width: 900px) {
-  #panel { width: 200px; }
+  #panel { width: 200px; bottom: auto; } /* full-width tray below, so the panel can't run to the floor */
   #tray { left: 12px; right: 12px; }
   #summary-panel { display: none !important; }
 }
@@ -1303,6 +1309,17 @@ const IS_MOBILE  = matchMedia('(pointer: coarse)').matches || Math.min(screen.wi
 const PIXEL_CAP  = IS_MOBILE ? 1.25 : 2;
 const SHADOW_RES = IS_MOBILE ? 1024 : 2048;
 const PORTRAIT_FIT = 1.4; // narrowest aspect (w/h) the camera framing was tuned for
+
+// HUD scale relative to the 1600×900 design size (see the zoom rule in the CSS)
+const PHONE_QUERY = matchMedia('(max-width: 700px), (max-height: 500px)');
+const UI_MIN = IS_MOBILE ? 0.9 : 0.75; // tablets: keep cards finger-sized; the tray scrolls instead
+function updateUiScale() {
+  const fit = Math.min(window.innerWidth / 1600, window.innerHeight / 900);
+  const ui  = PHONE_QUERY.matches ? 1 : Math.min(2, Math.max(UI_MIN, fit));
+  document.documentElement.style.setProperty('--ui', ui.toFixed(3));
+}
+updateUiScale();
+window.addEventListener('resize', updateUiScale);
 
 // ── Board geometry ────────────────────────────────────────────────
 const CELL_SIZE = 2.0; // Three.js world units per cell
