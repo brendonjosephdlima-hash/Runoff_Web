@@ -1,0 +1,3680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>runoff</title>
+<link rel="icon" href="assets/img/logo-blue.png">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://api.fontshare.com/v2/css?f[]=neulis-sans@300,400,500,600,700,800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-family: 'Neulis Sans', 'Inter', system-ui, sans-serif; }
+#canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+
+:root {
+  --bg:          #07071a;
+  --accent:      #818cf8;
+  --accent-glow: rgba(129,140,248,0.3);
+  --cyan:        #22d3ee;
+  --text:        #e8eaf2;
+  --text-dim:    #8892aa;
+  --text-muted:  #3d4460;
+  --green:       #4ade80;
+  --red:         #f87171;
+
+  /* ── liquid glass tokens ── */
+  --glass-bg:      rgba(10, 12, 28, 0.52);
+  --glass-bg-hi:   rgba(18, 20, 45, 0.62);
+  --glass-border:  rgba(255, 255, 255, 0.09);
+  --glass-shine:   rgba(255, 255, 255, 0.16);
+  --glass-blur:    blur(28px) saturate(170%) brightness(1.05);
+  --glass-shadow:  0 8px 40px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.05) inset;
+  --glass-radius:  20px;
+}
+
+/* ─────────────────────────────────────────
+   PANEL — light frosted glass inspector card
+───────────────────────────────────────── */
+#panel {
+  position: absolute; top: 16px; left: 16px; bottom: 16px; width: 252px; z-index: 10;
+  display: flex; flex-direction: column;
+  background: rgba(214, 228, 248, 0.70);
+  backdrop-filter: blur(40px) saturate(200%) brightness(1.1);
+  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.1);
+  border: 1px solid rgba(255,255,255,0.68);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 12px 56px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.1),
+              inset 0 1px 0 rgba(255,255,255,0.85);
+}
+
+/* Panel Header */
+.panel-header {
+  padding: 20px 16px 14px;
+  text-align: center;
+  border-bottom: 1px solid rgba(0,0,0,0.07);
+  position: relative;
+}
+.panel-title {
+  font-size: 22px; font-weight: 800;
+  color: #15192e;
+  letter-spacing: -0.04em;
+}
+.panel-subtitle {
+  font-size: 9px; letter-spacing: 0.13em; color: #7a8aaa;
+  text-transform: uppercase; margin-top: 4px; font-weight: 500;
+}
+#statusDot {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10px; color: #7a8aaa; margin-top: 10px;
+  background: rgba(255,255,255,0.5);
+  border-radius: 20px; padding: 3px 10px;
+  border: 1px solid rgba(255,255,255,0.75); font-weight: 500;
+}
+#statusDot .sdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink:0; }
+#statusDot.live { color: #16a34a; }
+
+/* Section labels */
+.panel-section-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.13em;
+  text-transform: uppercase; color: #9aaac4;
+  padding: 12px 16px 5px;
+}
+
+/* ─────────────────────────────────────────
+   METRIC HEALTH BARS
+───────────────────────────────────────── */
+.metrics {
+  flex: 1; display: flex; flex-direction: column;
+  padding: 4px 12px 10px;
+  gap: 8px;
+}
+
+.metric-bar-block {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 4px 2px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+.metric-bar-block:last-child { border-bottom: none; }
+
+.metric-bar-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+}
+.metric-bar-label {
+  font-size: 11px; font-weight: 600; color: #3d4f72;
+  letter-spacing: 0.02em; text-transform: uppercase;
+}
+.metric-bar-value {
+  font-size: 12px; font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: #3d4f72;
+}
+
+.metric-bar-track {
+  width: 100%; height: 8px;
+  background: rgba(0,0,0,0.12);
+  border-radius: 99px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.18);
+}
+.metric-bar-fill {
+  height: 100%; border-radius: 99px;
+  transition: width 0.4s ease, background 0.4s ease;
+  box-shadow: 0 0 6px rgba(255,255,255,0.3);
+}
+.metric-bar-centered { position: relative; }
+.metric-bar-centered .metric-bar-fill {
+  position: absolute; top: 0; height: 100%;
+  transition: width 0.4s ease, left 0.4s ease, right 0.4s ease, background 0.4s ease;
+}
+.metric-bar-center-mark {
+  position: absolute; left: 50%; top: 0; bottom: 0;
+  width: 2px; margin-left: -1px;
+  background: rgba(255,255,255,0.55);
+  border-radius: 1px; z-index: 1;
+}
+
+/* ─────────────────────────────────────────
+   MAP CELL OVERLAYS
+───────────────────────────────────────── */
+#overlays {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 5;
+}
+.map-cell {
+  position: absolute; border: none; border-radius: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden; transition: box-shadow 0.4s;
+}
+.map-cell.occupied { box-shadow: inset 0 0 30px rgba(0,0,0,0.08); }
+@keyframes liveTarget { 0%,100% { box-shadow: 0 0 0 3px #facc15, 0 0 20px 4px rgba(250,204,21,0.6); } 50% { box-shadow: 0 0 0 3px #facc15, 0 0 36px 10px rgba(250,204,21,0.9); } }
+.map-cell.live-target { animation: liveTarget 0.7s ease-in-out infinite; }
+.map-card {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px; padding: 6px; position: relative; overflow: hidden;
+}
+.map-card-label {
+  font-size: clamp(7px, 1vw, 10px); font-weight: 700;
+  letter-spacing: 0.04em; text-align: center; text-transform: uppercase;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 -1px 3px rgba(0,0,0,0.9),
+               1px 0 3px rgba(0,0,0,0.9), -1px 0 3px rgba(0,0,0,0.9);
+}
+.map-card-pct {
+  font-size: clamp(12px, 1.7vw, 19px); font-weight: 800;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 -1px 3px rgba(0,0,0,0.9),
+               1px 0 3px rgba(0,0,0,0.9), -1px 0 3px rgba(0,0,0,0.9);
+}
+.map-card-stars { font-size: clamp(8px, 0.95vw, 12px); letter-spacing: 1px; }
+
+@keyframes cardDrop {
+  0%   { transform: translateY(-50px) scale(0.72); opacity: 0; }
+  50%  { transform: translateY(8px)  scale(1.05); opacity: 1; }
+  70%  { transform: translateY(-4px) scale(0.97); opacity: 1; }
+  100% { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+@keyframes cardRemove {
+  0%   { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.55) rotate(5deg); opacity: 0; }
+}
+.anim-drop   { animation: cardDrop   0.5s cubic-bezier(0.34,1.3,0.64,1) forwards; }
+.anim-remove { animation: cardRemove 0.28s ease-in forwards; }
+
+/* ─────────────────────────────────────────
+   SOLUTION SUMMARY PANEL
+───────────────────────────────────────── */
+#summary-panel {
+  position: fixed; right: 16px; top: 220px;
+  width: 232px; max-height: calc(100vh - 248px);
+  z-index: 20; display: none; flex-direction: column;
+  background: rgba(8,10,24,0.78);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 18px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+#summary-panel.has-solutions { display: flex; }
+
+.summary-header {
+  padding: 14px 15px 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+.summary-title {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.13em;
+  text-transform: uppercase; color: rgba(255,255,255,0.38); margin-bottom: 10px;
+}
+.summary-pct-row { display: flex; align-items: baseline; gap: 5px; margin-bottom: 9px; }
+.summary-pct {
+  font-size: 34px; font-weight: 800; color: #fff; letter-spacing: -0.03em;
+  line-height: 1;
+}
+.summary-pct-label { font-size: 10px; color: rgba(255,255,255,0.38); }
+.summary-track {
+  height: 5px; background: rgba(255,255,255,0.08); border-radius: 99px;
+  position: relative; overflow: visible;
+}
+.summary-fill {
+  height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, #f87171, #fbbf24);
+  transition: width 0.7s cubic-bezier(0.34,1.56,0.64,1),
+              background 0.5s ease;
+  box-shadow: 0 0 10px rgba(251,191,36,0.4);
+}
+.summary-win-mark {
+  position: absolute; top: -4px; bottom: -4px; left: 50%;
+  width: 2px; background: rgba(255,255,255,0.28); border-radius: 1px;
+}
+.summary-win-label {
+  position: absolute; top: -16px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 7px; font-weight: 600; letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.28); white-space: nowrap;
+}
+
+.summary-list {
+  overflow-y: auto; flex: 1;
+  padding: 5px 0;
+}
+.summary-list::-webkit-scrollbar { width: 3px; }
+.summary-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.sol-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.sol-row:last-child { border-bottom: none; }
+.sol-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+.sol-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sol-name {
+  font-size: 11px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sol-meta { font-size: 9px; color: rgba(255,255,255,0.38); }
+.sol-eff  { font-weight: 700; }
+
+@keyframes solRowIn {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.sol-row-new { animation: solRowIn 0.35s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+/* ─────────────────────────────────────────
+   FLOOD STATE
+───────────────────────────────────────── */
+@keyframes floodPulse {
+  0%, 100% { background: rgba(20, 60, 200, 0.10); }
+  50%       { background: rgba(20, 60, 200, 0.38); }
+}
+.map-cell.flooded { animation: floodPulse 1.5s ease-in-out infinite; }
+.map-cell.flooded::after {
+  content: '💀'; position: absolute; font-size: 22px;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 6px rgba(255,50,50,0.9));
+}
+
+/* ─────────────────────────────────────────
+   STORM TIMER — prominent box
+───────────────────────────────────────── */
+#storm-timer-wrap {
+  margin: 12px 12px 8px;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid rgba(255,255,255,0.90);
+  border-radius: 18px;
+  padding: 16px 14px 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  box-shadow: inset 0 2px 0 rgba(255,255,255,1), 0 6px 24px rgba(0,0,0,0.10);
+}
+#storm-timer-label {
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #9aaac4;
+}
+#stormTimer {
+  font-size: 46px; font-weight: 900; letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+  color: #15192e; line-height: 1;
+  transition: color 0.4s;
+}
+
+/* ─────────────────────────────────────────
+   MAP IMAGE — fills remaining panel space
+───────────────────────────────────────── */
+#panel-map {
+  display: none;
+}
+#panel-map img {
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: 35% center;
+  display: block;
+}
+
+/* ─────────────────────────────────────────
+   METRICS PANEL — right side glass card
+───────────────────────────────────────── */
+#metrics-panel {
+  position: absolute; top: 16px; right: 16px; width: 232px; z-index: 10;
+  display: none; flex-direction: column;
+  background: rgba(214, 228, 248, 0.70);
+  backdrop-filter: blur(40px) saturate(200%) brightness(1.1);
+  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.1);
+  border: 1px solid rgba(255,255,255,0.68);
+  border-radius: 20px; overflow: hidden;
+  box-shadow: 0 12px 56px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.1),
+              inset 0 1px 0 rgba(255,255,255,0.85);
+  padding-bottom: 10px;
+}
+#metrics-panel .metrics { padding-top: 4px; }
+
+/* ─────────────────────────────────────────
+   STORM BUTTON
+───────────────────────────────────────── */
+#btnResetFlood {
+  margin: 4px 12px 12px; padding: 9px 0;
+  font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: #5a6a8e; cursor: pointer;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 10px;
+  width: calc(100% - 24px);
+  transition: all 0.2s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+}
+#btnResetFlood:hover {
+  background: rgba(255,255,255,0.7);
+  color: #15192e;
+}
+
+/* ─────────────────────────────────────────
+   SHARED SCREEN BASE
+───────────────────────────────────────── */
+.gs-screen {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.8s ease;
+}
+.gs-screen.visible { opacity: 1; pointer-events: all; }
+
+/* Shared light-glass card — same surface as the game panel */
+.screen-card {
+  background: rgba(214, 228, 248, 0.82);
+  backdrop-filter: blur(40px) saturate(200%) brightness(1.08);
+  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.08);
+  border: 1px solid rgba(255,255,255,0.72);
+  border-radius: 24px;
+  box-shadow: 0 16px 64px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.10),
+              inset 0 1px 0 rgba(255,255,255,0.90);
+  display: flex; flex-direction: column; align-items: center;
+  overflow: hidden;
+  position: relative; z-index: 1;
+}
+
+/* Runoff logo images */
+.panel-logo-img  { height: 28px; width: auto; object-fit: contain; vertical-align: middle; }
+.screen-logo-img { height: clamp(80px, 10vw, 130px); width: auto; object-fit: contain; display: block; margin: 0 auto 20px; }
+.idle-logo-img   { height: clamp(60px, 8vw, 110px); width: auto; object-fit: contain; }
+
+/* Screen logo badge — same style as panel-subtitle */
+.screen-eyebrow {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.18em;
+  text-transform: uppercase; color: #7a8aaa;
+  margin-bottom: 6px;
+}
+/* Large heading on screens */
+.screen-heading {
+  font-size: clamp(2rem, 5vw, 3.8rem); font-weight: 900;
+  letter-spacing: -0.04em; text-align: center; line-height: 1.1;
+  color: #15192e;
+}
+/* Shared pill button */
+.screen-btn {
+  font-family: 'Inter', sans-serif; font-weight: 700;
+  font-size: 13px; letter-spacing: 0.06em;
+  padding: 11px 32px; border-radius: 999px; border: none; cursor: pointer;
+  transition: transform 0.18s, box-shadow 0.18s, background 0.18s;
+}
+.screen-btn.primary {
+  background: rgba(255,255,255,0.72);
+  color: #15192e;
+  border: 1px solid rgba(255,255,255,0.9);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.95);
+}
+.screen-btn.primary:hover {
+  background: rgba(255,255,255,0.9);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,1);
+  transform: scale(1.04);
+}
+.screen-btn.secondary {
+  background: rgba(255,255,255,0.38);
+  color: #5a6a8e;
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.85);
+}
+.screen-btn.secondary:hover {
+  background: rgba(255,255,255,0.55);
+  transform: scale(1.03);
+}
+
+@keyframes tap-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+
+/* ─────────────────────────────────────────
+   IDLE SCREEN — liquid glass landing
+───────────────────────────────────────── */
+#idle-screen {
+  z-index: 9997;
+  background: linear-gradient(150deg, #0c1d6a 0%, #1a56db 42%, #0b91d8 72%, #07c4b0 100%);
+  opacity: 1 !important; pointer-events: all !important;
+  display: none !important;
+}
+#idle-screen.gs-hide {
+  opacity: 0 !important; pointer-events: none !important;
+  transition: none !important;
+}
+#idle-screen video {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: 0; transition: opacity 1s ease;
+}
+#idle-screen video.active { opacity: 1; }
+
+/* Animated liquid blob shapes */
+@keyframes idleBlobMorph {
+  0%,100% { border-radius: 40% 60% 60% 40% / 40% 40% 60% 60%; transform: translate(0,0) rotate(0deg); }
+  25%      { border-radius: 70% 30% 40% 60% / 50% 60% 40% 50%; transform: translate(14px,-20px) rotate(7deg); }
+  50%      { border-radius: 50% 50% 25% 75% / 65% 35% 65% 35%; transform: translate(-8px,14px) rotate(-5deg); }
+  75%      { border-radius: 30% 70% 60% 40% / 40% 60% 40% 60%; transform: translate(18px,6px) rotate(10deg); }
+}
+.idle-blob {
+  position: absolute; pointer-events: none;
+  animation: idleBlobMorph 12s ease-in-out infinite;
+}
+.idle-blob-1 {
+  width: 480px; height: 420px;
+  background: linear-gradient(135deg, #22c55e 0%, #06b6d4 55%, #3b82f6 100%);
+  top: -130px; right: -100px;
+  animation-duration: 14s; opacity: 0.92;
+}
+.idle-blob-2 {
+  width: 340px; height: 380px;
+  background: linear-gradient(225deg, #4ade80 0%, #22d3ee 100%);
+  bottom: -80px; right: 8%;
+  animation-duration: 11s; animation-delay: -3.5s; opacity: 0.82;
+}
+.idle-blob-3 {
+  width: 210px; height: 190px;
+  background: linear-gradient(45deg, #38bdf8 0%, #34d399 100%);
+  top: 20%; right: 28%;
+  animation-duration: 9s; animation-delay: -6s; opacity: 0.74;
+}
+.idle-blob-4 {
+  width: 150px; height: 130px;
+  background: linear-gradient(135deg, #86efac 0%, #67e8f9 100%);
+  top: 10%; right: 4%;
+  animation-duration: 10s; animation-delay: -1.5s; opacity: 0.70;
+}
+.idle-blob-5 {
+  width: 105px; height: 95px;
+  background: linear-gradient(200deg, #4ade80 0%, #60a5fa 100%);
+  bottom: 20%; right: 22%;
+  animation-duration: 8s; animation-delay: -4.5s; opacity: 0.65;
+}
+/* Extra blobs — left side and scattered */
+.idle-blob-6 {
+  width: 380px; height: 340px;
+  background: linear-gradient(315deg, #3b82f6 0%, #06b6d4 55%, #22c55e 100%);
+  bottom: -100px; left: -70px;
+  animation-duration: 13s; animation-delay: -7s; opacity: 0.78;
+}
+.idle-blob-7 {
+  width: 220px; height: 200px;
+  background: linear-gradient(45deg, #22d3ee 0%, #4ade80 100%);
+  top: -55px; left: 6%;
+  animation-duration: 10s; animation-delay: -2.2s; opacity: 0.68;
+}
+.idle-blob-8 {
+  width: 130px; height: 115px;
+  background: linear-gradient(135deg, #67e8f9 0%, #86efac 100%);
+  top: 52%; left: 3%;
+  animation-duration: 8s; animation-delay: -5.5s; opacity: 0.58;
+}
+.idle-blob-9 {
+  width: 80px; height: 70px;
+  background: linear-gradient(90deg, #34d399 0%, #38bdf8 100%);
+  top: 30%; left: 18%;
+  animation-duration: 7s; animation-delay: -3s; opacity: 0.52;
+}
+.idle-blob-10 {
+  width: 60px; height: 55px;
+  background: linear-gradient(45deg, #a78bfa 0%, #22d3ee 100%);
+  bottom: 38%; right: 40%;
+  animation-duration: 6s; animation-delay: -1s; opacity: 0.48;
+}
+
+/* Floating particles */
+@keyframes idleParticleFloat {
+  0%,100% { transform: translateY(0); opacity: 0.55; }
+  50%      { transform: translateY(-18px); opacity: 1; }
+}
+.idle-particle {
+  position: absolute; border-radius: 50%;
+  background: rgba(255,255,255,0.7); pointer-events: none;
+  animation: idleParticleFloat 6s ease-in-out infinite;
+}
+.idle-p1  { width: 11px; height: 11px; right: 20%; top: 42%;    animation-delay: 0s;    }
+.idle-p2  { width: 7px;  height: 7px;  right: 38%; top: 22%;    animation-delay: -2s;   }
+.idle-p3  { width: 5px;  height: 5px;  right: 9%;  bottom: 32%; animation-delay: -4s;   }
+.idle-p4  { width: 9px;  height: 9px;  right: 44%; bottom: 18%; animation-delay: -1s;   }
+.idle-p5  { width: 6px;  height: 6px;  right: 15%; top: 65%;    animation-delay: -3.5s; }
+.idle-p6  { width: 8px;  height: 8px;  left: 12%;  top: 28%;    animation-delay: -1.5s; }
+.idle-p7  { width: 5px;  height: 5px;  left: 7%;   bottom: 38%; animation-delay: -3s;   }
+.idle-p8  { width: 10px; height: 10px; left: 22%;  top: 68%;    animation-delay: -0.5s; }
+.idle-p9  { width: 6px;  height: 6px;  left: 35%;  top: 15%;    animation-delay: -2.5s; }
+.idle-p10 { width: 4px;  height: 4px;  left: 18%;  bottom: 22%; animation-delay: -4.5s; }
+.idle-p11 { width: 7px;  height: 7px;  right: 52%; top: 55%;    animation-delay: -1.8s; }
+.idle-p12 { width: 5px;  height: 5px;  right: 28%; bottom: 44%; animation-delay: -3.8s; }
+
+/* Vertical light streaks spread across full screen */
+.idle-vstripe {
+  position: absolute; top: 0; bottom: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.22) 28%,
+              rgba(255,255,255,0.22) 72%, transparent 100%);
+}
+.idle-vs1 { left: 6%;   width: 1px; }
+.idle-vs2 { left: 16%;  width: 1px; }
+.idle-vs3 { left: 30%;  width: 2px; opacity: 0.6; }
+.idle-vs4 { right: 30%; width: 1px; }
+.idle-vs5 { right: 18%; width: 1px; }
+.idle-vs6 { right: 6%;  width: 1px; }
+
+/* Centered glass card — liquid glass override */
+.idle-card {
+  flex-direction: column; align-items: center; text-align: center;
+  padding: 64px 72px 56px;
+  width: min(520px, 88vw);
+  gap: 0;
+  /* Liquid glass: very low opacity, strong blur, multi-layer gloss */
+  background: linear-gradient(
+    145deg,
+    rgba(255,255,255,0.20) 0%,
+    rgba(180,215,255,0.10) 50%,
+    rgba(255,255,255,0.16) 100%
+  );
+  backdrop-filter: blur(56px) saturate(180%) brightness(1.22);
+  -webkit-backdrop-filter: blur(56px) saturate(180%) brightness(1.22);
+  border: 1px solid rgba(255,255,255,0.38);
+  box-shadow:
+    0 32px 100px rgba(0,60,200,0.32),
+    inset 0 2px 0 rgba(255,255,255,0.95),
+    inset 0 0 80px rgba(255,255,255,0.06),
+    0 0 0 1px rgba(255,255,255,0.10);
+}
+/* Glossy top-half sheen */
+.idle-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 52%;
+  border-radius: 24px 24px 0 0;
+  background: linear-gradient(180deg, rgba(255,255,255,0.26) 0%, rgba(255,255,255,0.04) 65%, transparent 100%);
+  pointer-events: none; z-index: 2;
+}
+
+
+.idle-eyebrow {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.22em;
+  text-transform: uppercase; color: rgba(255,255,255,0.65); margin-bottom: 12px;
+}
+.idle-logo {
+  font-size: clamp(3.8rem, 6.5vw, 5.8rem); font-weight: 900;
+  color: #fff; letter-spacing: -0.055em;
+  line-height: 1; margin-bottom: 14px;
+  text-shadow: 0 2px 24px rgba(0,60,160,0.22);
+}
+.idle-tagline {
+  font-size: 15px; font-weight: 400; color: rgba(255,255,255,0.78);
+  line-height: 1.65; margin-bottom: 44px;
+}
+.idle-tap-hint {
+  position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 9px;
+  font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.95);
+  letter-spacing: 0.08em; white-space: nowrap;
+  animation: tap-blink 1.1s step-end infinite;
+  z-index: 10;
+}
+.idle-tap-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: #a5f3fc;
+  box-shadow: 0 0 10px rgba(165,243,252,1);
+}
+
+/* ─────────────────────────────────────────
+   BLACK FADE OVERLAY
+───────────────────────────────────────── */
+#black-fade {
+  position: fixed; inset: 0; z-index: 999999;
+  background: #000;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.35s ease;
+}
+
+/* ─────────────────────────────────────────
+   END SCREEN
+───────────────────────────────────────── */
+#end-screen {
+  z-index: 9999;
+  background: radial-gradient(ellipse at 50% 35%, rgba(20,20,60,0.72) 0%, rgba(7,7,26,0.95) 70%);
+  backdrop-filter: blur(4px);
+}
+.end-card {
+  padding: 44px 56px 44px;
+  gap: 0;
+  min-width: 380px; text-align: center;
+}
+.end-title {
+  font-size: clamp(2rem, 5vw, 3.8rem); font-weight: 900;
+  letter-spacing: -0.04em; line-height: 1.1;
+  margin-top: 8px; margin-bottom: 8px;
+}
+.end-title.win  { color: #16a34a; }
+.end-title.loss { color: #dc2626; }
+.end-stats {
+  font-size: 12px; font-weight: 500; color: #7a8aaa;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  margin-bottom: 28px; margin-top: 4px;
+}
+.end-divider {
+  width: 100%; height: 1px;
+  background: rgba(0,0,0,0.07);
+  margin-bottom: 24px;
+}
+.end-buttons { display: flex; gap: 10px; }
+.end-countdown-wrap {
+  margin-top: 20px; width: 100%;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.end-countdown-bar {
+  width: 100%; height: 3px;
+  background: rgba(0,0,0,0.08); border-radius: 99px; overflow: hidden;
+}
+.end-countdown-bar > div {
+  height: 100%; width: 100%; border-radius: 99px;
+  background: #94a3b8;
+  transform-origin: left;
+  transition: width 1s linear;
+}
+.end-countdown-label {
+  font-size: 11px; color: #94a3b8;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+
+
+/* ─────────────────────────────────────────
+   NOTIFY METRICS ROW
+───────────────────────────────────────── */
+.notify-metrics {
+  display: flex; gap: 5px; flex-wrap: wrap; justify-content: center;
+  padding: 0 8px;
+}
+.notify-metric {
+  font-size: 9px; color: var(--text-dim);
+  background: rgba(255,255,255,0.05); padding: 3px 8px; border-radius: 20px;
+  border: 1px solid var(--glass-border); white-space: nowrap;
+}
+
+/* ─────────────────────────────────────────
+   ADVISOR CHARACTER — glass bubble
+───────────────────────────────────────── */
+#advisor {
+  position: fixed; bottom: -280px; left: 50%; transform: translateX(-50%);
+  z-index: 30;
+  display: flex; align-items: flex-end; gap: 0;
+  transition: bottom 0.58s cubic-bezier(0.34,1.56,0.64,1);
+  pointer-events: none;
+}
+#advisor.adv-in  { bottom: 20px; pointer-events: all; }
+#advisor.adv-out { bottom: -280px; pointer-events: none; }
+
+.adv-avatar {
+  width: 88px; height: 118px;
+  border-radius: 44px 44px 10px 10px;
+  flex-shrink: 0; align-self: flex-end;
+  background: rgba(15,15,40,0.65);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(241,196,15,0.5);
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-end; padding-bottom: 10px; gap: 4px;
+  box-shadow: 0 0 0 4px rgba(241,196,15,0.12),
+              0 16px 48px rgba(0,0,0,0.8),
+              inset 0 1px 0 rgba(255,255,255,0.1);
+  animation: advBob 2.2s ease-in-out infinite;
+  position: relative; overflow: hidden;
+}
+.adv-avatar::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 50%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(241,196,15,0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+.adv-face { font-size: 48px; line-height: 1; }
+.adv-char-name {
+  font-size: 8px; font-weight: 800; color: #f1c40f;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  text-align: center; line-height: 1.3; padding: 0 4px;
+  white-space: pre-line;
+}
+@keyframes advBob {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-7px); }
+}
+
+.adv-bubble {
+  position: relative; margin-left: 12px;
+  background: rgba(10,12,28,0.6);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(241,196,15,0.25);
+  border-radius: 18px 18px 18px 6px;
+  padding: 14px 38px 14px 16px;
+  max-width: 280px;
+  box-shadow: 0 10px 48px rgba(0,0,0,0.65),
+              inset 0 1px 0 rgba(255,255,255,0.1);
+}
+/* speech tail */
+.adv-bubble::before {
+  content:''; position:absolute; left:-9px; top:20px;
+  border:9px solid transparent;
+  border-right-color:rgba(241,196,15,0.25);
+}
+.adv-bubble::after {
+  content:''; position:absolute; left:-7px; top:21px;
+  border:8px solid transparent;
+  border-right-color:rgba(10,12,28,0.8);
+}
+
+.adv-close {
+  position:absolute; top:9px; right:10px;
+  background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
+  color:var(--text-dim); font-size:11px; cursor:pointer; line-height:1;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+.adv-close:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+.adv-header { display:flex; align-items:center; gap:7px; margin-bottom:6px; }
+.adv-tag {
+  font-size:8px; font-weight:700; letter-spacing:0.08em;
+  padding:2px 8px; border-radius:999px;
+  border:1px solid; backdrop-filter: blur(8px);
+}
+.adv-name { font-size:13px; font-weight:800; color:var(--text); }
+.adv-text {
+  font-size:11px; color:var(--text-dim); line-height:1.55; margin-bottom:9px;
+}
+.adv-stats { display:flex; flex-wrap:wrap; gap:4px; }
+.adv-stat {
+  font-size:9px; font-weight:600; color:var(--text-dim);
+  background:rgba(255,255,255,0.05); border:1px solid var(--glass-border);
+  border-radius:6px; padding:3px 7px;
+}
+
+
+/* ─────────────────────────────────────────
+   BUDGET WARNING TOAST
+───────────────────────────────────────── */
+#budget-warning {
+  position: fixed; bottom: 28px; left: 50%;
+  transform: translateX(-50%) translateY(90px);
+  z-index: 35; pointer-events: none;
+  background: rgba(185,28,28,0.93);
+  backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid rgba(255,130,130,0.4);
+  border-radius: 14px; padding: 13px 22px;
+  display: flex; align-items: center; gap: 12px;
+  color: #fff; font-size: 13px; font-weight: 700;
+  opacity: 0; transition: transform 0.4s cubic-bezier(0.22,1,0.36,1), opacity 0.35s;
+  white-space: nowrap;
+}
+#budget-warning.bw-show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  animation: budgetPulse 0.7s ease-in-out infinite alternate;
+}
+.bw-icon { font-size: 20px; line-height: 1; }
+@keyframes budgetPulse {
+  from { box-shadow: 0 0 0 0 rgba(220,38,38,0.55); }
+  to   { box-shadow: 0 0 0 14px rgba(220,38,38,0); }
+}
+@keyframes metricShake {
+  0%,100% { transform: translateX(0); }
+  20%     { transform: translateX(-5px); }
+  40%     { transform: translateX(5px); }
+  60%     { transform: translateX(-3px); }
+  80%     { transform: translateX(3px); }
+}
+.metric-shake { animation: metricShake 0.42s ease-in-out; }
+
+/* Tray sits along the bottom, so lift the advisor + toast above it */
+#advisor.adv-in { bottom: 168px; }
+#budget-warning { bottom: 168px; }
+
+/* ─────────────────────────────────────────
+   SOLUTION TRAY — drag-and-drop tokens (replaces the ArUco tokens)
+───────────────────────────────────────── */
+#tray {
+  position: fixed; left: 284px; right: 264px; bottom: 16px; z-index: 25;
+  display: none; flex-direction: column; gap: 8px;
+  padding: 10px 12px 12px;
+  background: rgba(214, 228, 248, 0.70);
+  backdrop-filter: blur(40px) saturate(200%) brightness(1.1);
+  -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.1);
+  border: 1px solid rgba(255,255,255,0.68);
+  border-radius: 20px;
+  box-shadow: 0 12px 56px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.1),
+              inset 0 1px 0 rgba(255,255,255,0.85);
+  transition: box-shadow 0.2s, background 0.2s;
+}
+#tray.visible { display: flex; }
+#tray.drop-remove { background: rgba(254, 202, 202, 0.82); }
+.tray-head {
+  display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px;
+}
+.tray-title {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.13em;
+  text-transform: uppercase; color: #9aaac4;
+}
+.tray-hint { font-size: 10px; color: #7a8aaa; font-weight: 500; }
+.tray-cards {
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.tray-card {
+  flex: 1 1 0; min-width: 80px; max-width: 120px; position: relative;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 9px 9px 8px;
+  background: rgba(255,255,255,0.62);
+  border: 1px solid rgba(255,255,255,0.9);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 3px 12px rgba(0,0,0,0.08);
+  cursor: grab; user-select: none; touch-action: none;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
+}
+.tray-card:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 #fff, 0 8px 20px rgba(0,0,0,0.14); }
+.tray-card.dragging { opacity: 0.35; }
+.tray-card.placed { background: rgba(255,255,255,0.32); }
+.tray-card.unaffordable { opacity: 0.45; }
+.tray-swatch { height: 4px; border-radius: 99px; }
+.tray-name {
+  font-size: 11px; font-weight: 800; color: #15192e; line-height: 1.2;
+  letter-spacing: -0.01em; min-height: 26px;
+}
+.tray-cat { font-size: 8px; font-weight: 700; letter-spacing: 0.1em; color: #9aaac4; display: flex; justify-content: space-between; }
+.tray-bio { letter-spacing: 0; }
+.tray-meta { display: flex; justify-content: space-between; font-size: 9px; font-weight: 600; color: #5a6a8e; }
+.tray-placed-tag {
+  min-height: 11px; font-size: 8px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #16a34a;
+}
+.tray-remove {
+  position: absolute; top: 5px; right: 5px;
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.1); background: rgba(255,255,255,0.85);
+  color: #5a6a8e; font-size: 9px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.tray-remove:hover { background: #fee2e2; color: #dc2626; }
+
+#drag-ghost {
+  position: fixed; left: 0; top: 0; z-index: 40; pointer-events: none;
+  display: none; padding: 8px 12px; border-radius: 12px;
+  font-size: 12px; font-weight: 800; color: #15192e;
+  background: rgba(255,255,255,0.92);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  border-left: 5px solid #ccc;
+  white-space: nowrap;
+}
+#drag-ghost .ghost-tip { display: block; font-size: 10px; font-weight: 600; color: #5a6a8e; margin-top: 3px; }
+#drag-ghost .ghost-tip.bad { color: #dc2626; }
+#drag-ghost .ghost-tip.good { color: #16a34a; }
+
+/* Panel buttons (restart / exit) */
+.panel-actions { display: flex; gap: 6px; margin: 0 12px 12px; }
+.panel-btn {
+  flex: 1; padding: 9px 0;
+  font-family: inherit; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: #5a6a8e; cursor: pointer;
+  background: rgba(255,255,255,0.45);
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.9);
+  transition: background 0.2s, color 0.2s;
+}
+.panel-btn:hover { background: rgba(255,255,255,0.75); color: #15192e; }
+.panel-howto {
+  margin: 0 12px 12px; padding: 12px 13px;
+  font-size: 11px; line-height: 1.55; color: #3d4f72;
+  background: rgba(255,255,255,0.4); border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.7);
+}
+.panel-howto b { color: #15192e; }
+
+/* Summary row remove button */
+.sol-row { position: relative; }
+.sol-x {
+  margin-left: auto; flex-shrink: 0;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.5); font-size: 10px; cursor: pointer;
+}
+.sol-x:hover { background: rgba(248,113,113,0.25); color: #fff; }
+
+/* ─────────────────────────────────────────
+   LANDING — sits over the looping concept video
+───────────────────────────────────────── */
+#landing {
+  position: fixed; inset: 0; z-index: 9600;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  background: #0b1438;
+}
+#landing.visible { display: flex; }
+#water-bg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.landing-card { padding: 48px 56px 40px; width: min(520px, 88vw); text-align: center; }
+.howto-card { width: min(600px, 92vw); padding: 36px 44px 32px; text-align: left; align-items: stretch; max-height: 92vh; overflow-y: auto; }
+.howto-card .screen-eyebrow { text-align: center; }
+.howto-heading {
+  font-size: 26px; font-weight: 900; color: #15192e; letter-spacing: -0.03em;
+  text-align: center; margin-bottom: 20px;
+}
+.howto-steps {
+  font-size: 13.5px; line-height: 1.55; color: #3d4f72;
+  padding-left: 22px; margin-bottom: 26px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+.howto-steps b { color: #15192e; }
+.file-warning {
+  display: none; margin-top: 20px; padding: 10px 14px; border-radius: 12px;
+  font-size: 12px; line-height: 1.5; color: #991b1b; background: rgba(254,226,226,0.85);
+}
+.file-warning.visible { display: block; }
+.landing-tagline {
+  font-size: 15px; color: #3d4f72; line-height: 1.6; margin-bottom: 28px;
+}
+.landing-buttons { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+/* Video skip button (replaces "Press C to skip") */
+#vid-skip {
+  display: none; position: absolute; bottom: 32px; right: 40px; z-index: 2;
+  font-family: inherit; font-size: 13px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #fff; cursor: pointer;
+  padding: 11px 24px; border-radius: 999px;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.35);
+  backdrop-filter: blur(12px);
+}
+#vid-skip:hover { background: rgba(255,255,255,0.26); }
+
+/* Level select controls */
+.lvl-controls { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; pointer-events: all; }
+.lvl-arrow {
+  width: 46px; height: 46px; border-radius: 50%;
+  font-size: 20px; color: #fff; cursor: pointer;
+  background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.3);
+}
+.lvl-arrow:hover { background: rgba(255,255,255,0.24); }
+
+.end-buttons { flex-wrap: wrap; justify-content: center; }
+
+@media (max-width: 900px) {
+  #panel { width: 200px; }
+  #tray { left: 12px; right: 12px; }
+  #summary-panel { display: none !important; }
+}
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="overlays"></div>
+<div id="summary-panel">
+  <div class="summary-header">
+    <div class="summary-title">Runoff Mitigation</div>
+    <div class="summary-pct-row">
+      <span class="summary-pct" id="summary-pct">0%</span>
+      <span class="summary-pct-label">mitigated</span>
+    </div>
+    <div class="summary-track">
+      <div class="summary-win-label">WIN</div>
+      <div class="summary-win-mark"></div>
+      <div class="summary-fill" id="summary-fill" style="width:0%"></div>
+    </div>
+  </div>
+  <div class="summary-list" id="summary-list"></div>
+</div>
+
+
+<!-- ── Advisor character ──────────────────────────────────────── -->
+<div id="advisor" class="adv-out">
+  <div class="adv-avatar">
+    <span class="adv-face" id="adv-face">👩‍🌾</span>
+    <span class="adv-char-name" id="adv-char-name">Advisor</span>
+  </div>
+  <div class="adv-bubble">
+    <button class="adv-close" onclick="dismissAdvisor()">✕</button>
+    <div class="adv-header">
+      <span class="adv-tag" id="adv-tag">ADAPT</span>
+      <span class="adv-name" id="adv-name">Solution</span>
+    </div>
+    <div class="adv-text" id="adv-text">Deploying NbS…</div>
+    <div class="adv-stats" id="adv-stats"></div>
+  </div>
+</div>
+
+<div id="panel">
+  <div class="panel-header">
+    <div class="panel-title"><img src="assets/img/logo-light.png" alt="runoff" class="panel-logo-img"></div>
+    <div class="panel-subtitle">Barcelona · <span id="panel-level-name"></span></div>
+  </div>
+
+  <div id="storm-timer-wrap">
+    <div id="storm-timer-label">⛈ Time Remaining</div>
+    <div id="stormTimer">2:00</div>
+  </div>
+
+  <div class="panel-howto">
+    <b>Drag</b> a solution from the tray onto a block. Drag a placed card to another block to move it, or back onto the tray to remove it.<br><br>
+    Mitigate <b>50%</b> of the runoff before the storm ends, without going over budget.
+  </div>
+
+  <div class="panel-actions">
+    <button class="panel-btn" id="btn-restart">↺ Restart</button>
+    <button class="panel-btn" id="btn-exit">✕ Exit</button>
+  </div>
+
+  <div id="panel-map">
+    <img src="assets/img/map.png" alt="Barcelona Grid Map">
+  </div>
+</div>
+
+<!-- ── METRICS PANEL — top right ─────────────────────────────── -->
+<div id="metrics-panel">
+  <div class="panel-section-label">Resources</div>
+  <div class="metrics">
+
+    <div class="metric-bar-block" id="m-cash">
+      <div class="metric-bar-header">
+        <span class="metric-bar-label">💰 City Budget</span>
+        <span class="metric-bar-value" id="v-cash">3,000</span>
+      </div>
+      <div class="metric-bar-track">
+        <div class="metric-bar-fill" id="b-cash" style="width:100%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div>
+      </div>
+    </div>
+
+    <div class="metric-bar-block" id="m-carbon">
+      <div class="metric-bar-header">
+        <span class="metric-bar-label">🌿 Carbon Credits</span>
+        <span class="metric-bar-value" id="v-carbon">25.0 t</span>
+      </div>
+      <div class="metric-bar-track">
+        <div class="metric-bar-fill" id="b-carbon" style="width:100%;background:linear-gradient(90deg,#16a34a,#4ade80)"></div>
+      </div>
+    </div>
+
+    <div class="metric-bar-block" id="m-bio">
+      <div class="metric-bar-header">
+        <span class="metric-bar-label">🌿 Biodiversity</span>
+        <span class="metric-bar-value" id="v-bio">0</span>
+      </div>
+      <div class="metric-bar-track metric-bar-centered">
+        <div class="metric-bar-center-mark"></div>
+        <div class="metric-bar-fill" id="b-bio" style="width:0%;left:50%"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── SOLUTION TRAY — drag-and-drop tokens ──────────────────── -->
+<div id="tray">
+  <div class="tray-head">
+    <span class="tray-title">Nature-Based Solutions</span>
+    <span class="tray-hint" id="tray-hint">Drag a card onto a block</span>
+  </div>
+  <div class="tray-cards" id="tray-cards"></div>
+</div>
+<div id="drag-ghost"></div>
+
+<!-- ── BUDGET WARNING TOAST ──────────────────────────────────── -->
+<div id="budget-warning">
+  <span class="bw-icon">⚠️</span>
+  <span class="bw-text">Budget exceeded — remove or replace a solution</span>
+</div>
+
+<!-- ── VIDEO OVERLAY ─────────────────────────────────────────── -->
+<div id="vid-overlay" style="position:fixed;inset:0;z-index:9500;background:#000;display:none;">
+  <video id="vid-player" preload="auto" style="width:100%;height:100%;object-fit:cover;" playsinline></video>
+  <!-- Context video elements — buffered from page load, played in-place to avoid buffer transfer lag -->
+  <video id="ctxv-upper_left"  preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
+  <video id="ctxv-lower_left"  preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
+  <video id="ctxv-lower_right" preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
+  <video id="ctxv-upper_right" preload="auto" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;" playsinline></video>
+  <button id="vid-skip">Skip ›</button>
+</div>
+
+<!-- ── LANDING — start + how-to cards over animated water ────── -->
+<div id="landing">
+  <canvas id="water-bg"></canvas>
+
+  <div class="screen-card landing-card" id="card-start">
+    <img src="assets/img/logo-blue.png" alt="runoff" class="screen-logo-img">
+    <div class="landing-tagline">Nature-Based Solutions<br>for Barcelona's Flood Crisis</div>
+    <div class="landing-buttons">
+      <button class="screen-btn primary" id="btn-play">▶ &nbsp;Play</button>
+    </div>
+    <div class="file-warning" id="file-warning">
+      This page was opened as a file, so the 3D models can’t load.<br>Run <b>start.bat</b> in the Runoff_Web folder instead.
+    </div>
+  </div>
+
+  <div class="screen-card landing-card howto-card" id="card-howto" style="display:none">
+    <div class="screen-eyebrow">How to play</div>
+    <div class="howto-heading">A storm is coming to Barcelona</div>
+    <ol class="howto-steps">
+      <li><b>Choose a block</b> of the city to protect: mountains, river, urban, or mountains and river.</li>
+      <li>You have <b>2 minutes</b> before the storm floods the streets.</li>
+      <li><b>Drag nature-based solutions</b> from the tray at the bottom onto the buildings. Each one only works on the blocks where it fits, and the tip tells you how much runoff it will absorb before you drop it.</li>
+      <li>Stay within your <b>city budget</b> and <b>carbon credits</b>, and watch your <b>biodiversity</b>. Grey infrastructure is powerful but costly.</li>
+      <li>Each solution can be used <b>once</b>. Drag a placed one to another block to move it, or back to the tray to remove it.</li>
+      <li>Mitigate <b>50% of the runoff</b> before time runs out to beat the flood.</li>
+    </ol>
+    <div class="landing-buttons">
+      <button class="screen-btn primary" id="btn-choose-block">Choose a block &nbsp;›</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── IDLE SCREEN — liquid glass landing ────────────────────── -->
+<div id="idle-screen" class="gs-screen">
+  <video class="idle-vid" src="" muted playsinline preload="none"></video>
+  <video class="idle-vid" src="" muted playsinline preload="none"></video>
+  <video class="idle-vid" src="" muted playsinline preload="none"></video>
+
+  <!-- Floating liquid blobs (behind the card) -->
+  <div class="idle-blob idle-blob-1"></div>
+  <div class="idle-blob idle-blob-2"></div>
+  <div class="idle-blob idle-blob-3"></div>
+  <div class="idle-blob idle-blob-4"></div>
+  <div class="idle-blob idle-blob-5"></div>
+  <div class="idle-blob idle-blob-6"></div>
+  <div class="idle-blob idle-blob-7"></div>
+  <div class="idle-blob idle-blob-8"></div>
+  <div class="idle-blob idle-blob-9"></div>
+  <div class="idle-blob idle-blob-10"></div>
+
+  <!-- Floating particles -->
+  <div class="idle-particle idle-p1"></div>
+  <div class="idle-particle idle-p2"></div>
+  <div class="idle-particle idle-p3"></div>
+  <div class="idle-particle idle-p4"></div>
+  <div class="idle-particle idle-p5"></div>
+  <div class="idle-particle idle-p6"></div>
+  <div class="idle-particle idle-p7"></div>
+  <div class="idle-particle idle-p8"></div>
+  <div class="idle-particle idle-p9"></div>
+  <div class="idle-particle idle-p10"></div>
+  <div class="idle-particle idle-p11"></div>
+  <div class="idle-particle idle-p12"></div>
+
+  <!-- Vertical light streaks -->
+  <div class="idle-vstripe idle-vs1"></div>
+  <div class="idle-vstripe idle-vs2"></div>
+  <div class="idle-vstripe idle-vs3"></div>
+  <div class="idle-vstripe idle-vs4"></div>
+  <div class="idle-vstripe idle-vs5"></div>
+  <div class="idle-vstripe idle-vs6"></div>
+
+  <!-- Glass card -->
+  <div class="screen-card idle-card">
+    <div class="idle-logo"><img src="assets/img/logo-light.png" alt="runoff" class="idle-logo-img"></div>
+    <div class="idle-tagline">Nature-Based Solutions<br>for Barcelona's Flood Crisis</div>
+  </div>
+
+  <!-- Tap hint outside the card, blinking at bottom of screen -->
+  <div class="idle-tap-hint">
+    <span class="idle-tap-dot"></span>
+    Tap anywhere to begin
+  </div>
+</div>
+
+<!-- ── BLACK FADE — sits above everything for transitions ────── -->
+<div id="black-fade"></div>
+
+<!-- ── END SCREEN ─────────────────────────────────────────────── -->
+<div id="end-screen" class="gs-screen">
+  <div class="screen-card end-card">
+    <img src="assets/img/logo-blue.png" alt="runoff" class="screen-logo-img">
+    <div class="end-title" id="end-title">THE FLOOD WINS</div>
+    <div class="end-stats" id="end-stats">You mitigated 0% of the storm</div>
+    <div class="end-divider"></div>
+    <div class="end-buttons">
+      <button class="screen-btn primary" id="btn-try-again">↺ &nbsp;Try Again</button>
+      <button class="screen-btn secondary" id="btn-other-level">Choose another block</button>
+      <button class="screen-btn secondary" id="btn-home">Home</button>
+    </div>
+  </div>
+</div>
+
+<!-- Level select overlay -->
+<div id="lvl-overlay" style="display:none; position:fixed; inset:0; z-index:8000;">
+  <canvas id="lvl-canvas" style="position:absolute; inset:0; width:100%; height:100%;"></canvas>
+  <div style="position:absolute; bottom:80px; left:50%; transform:translateX(-50%); text-align:center; color:#e8eaf2; pointer-events:none; font-family:'Neulis Sans',system-ui,sans-serif; white-space:nowrap;">
+    <div id="lvl-name" style="font-size:38px; font-weight:700; letter-spacing:0.04em; margin-bottom:10px; text-shadow:0 2px 16px rgba(0,0,0,0.8);"></div>
+    <div id="lvl-hint" style="font-size:14px; opacity:0.5; letter-spacing:0.1em; text-transform:uppercase;"></div>
+    <div style="margin:14px auto 0; width:320px; height:3px; background:rgba(255,255,255,0.12); border-radius:2px;">
+      <div id="lvl-bar" style="height:100%; width:0%; background:#818cf8; border-radius:2px;"></div>
+    </div>
+    <div class="lvl-controls">
+      <button class="lvl-arrow" id="lvl-prev" aria-label="Previous block">‹</button>
+      <button class="screen-btn primary" id="lvl-select">Play this block</button>
+      <button class="lvl-arrow" id="lvl-next" aria-label="Next block">›</button>
+    </div>
+  </div>
+</div>
+
+<script>
+THREE.Cache.enabled = true; // browser-level GLB cache — prevents re-fetching same model
+
+// ── Board geometry ────────────────────────────────────────────────
+const CELL_SIZE = 2.0; // Three.js world units per cell
+let _levelBudget       = 3000;  // set per level from LEVEL_CONFIGS.budget
+let _levelCarbonBudget = 20.0;  // set per level from LEVEL_CONFIGS.carbonBudget
+
+// Raw budget balances updated by updateMetrics — used for over-budget blocking
+let _budgetCash   = Infinity;
+let _budgetCarbon = Infinity;
+let _budgetBio    = 0;
+
+const LEVEL_CONFIGS = {
+  upper_left:  { budget: 6000, carbonBudget: 40.0, waterBase: 1.8, camX: 0, camZ: 4.5, gridX: 0, ctx: { x:  0.0, y: -0.1, z:  1.0 }, cells: [
+    {c:1,r:0,n:1},  {c:2,r:0,n:2},  {c:3,r:0,n:3},
+    {c:1,r:1,n:4},  {c:2,r:1,n:5},
+    {c:0,r:2,n:6},  {c:1,r:2,n:7},
+    {c:1,r:3,n:8}
+  ]},
+  lower_left:  { budget: 3100, carbonBudget: 20.0, waterBase: 0.9, camX: -0.8, frustum: 6.5, gridX: 1.0, ctx: { x: -1.0, y: -0.1, z: -2.0 }, cells: [
+    {c:0,r:0,n:9},
+    {c:0,r:1,n:10}, {c:1,r:1,n:11},
+    {c:0,r:2,n:12}, {c:1,r:2,n:13}
+  ]},
+  lower_right: { budget: 6800, carbonBudget: 50.0, waterBase: 1.0, camX: 0, gridX: 0, ctx: { x: -1.0, y: -0.1, z: -2.0 }, cells: [
+    {c:0,r:0,n:14}, {c:1,r:0,n:15}, {c:2,r:0,n:16},
+    {c:0,r:1,n:17}, {c:1,r:1,n:18}, {c:2,r:1,n:19}
+  ]},
+  upper_right: { budget: 4400, carbonBudget: 30.0, waterBase: 1.7, camX: 0, gridX: 0, ctx: { x: -1.0, y: -0.1, z:  1.0 }, cells: [
+    {c:0,r:0,n:20}, {c:1,r:0,n:21},
+    {c:0,r:1,n:22}, {c:1,r:1,n:23}, {c:2,r:1,n:24}, {c:3,r:1,n:25},
+    {c:3,r:2,n:26}
+  ]},
+};
+
+let CELLS = [];
+const CELL_KEY_TO_BLOCK = {};
+
+function applyLevelConfig(levelId) {
+  const config = LEVEL_CONFIGS[levelId] || { cells: [] };
+  CELLS = config.cells.map(({c, r}) => ({c, r}));
+  Object.keys(CELL_KEY_TO_BLOCK).forEach(k => delete CELL_KEY_TO_BLOCK[k]);
+  config.cells.forEach(({c, r, n}) => { CELL_KEY_TO_BLOCK[`${c}_${r}`] = n; });
+  _levelBudget = config.budget || 3000;
+  _levelCarbonBudget = config.carbonBudget || 20.0;
+  _budgetCash = _levelBudget; _budgetCarbon = _levelCarbonBudget; _budgetBio = 0;
+  // Reset metric displays to full / baseline
+  const cashEl   = document.getElementById('v-cash');
+  const carbonEl = document.getElementById('v-carbon');
+  const bioEl    = document.getElementById('v-bio');
+  if (cashEl)   { cashEl.textContent   = _levelBudget.toLocaleString(); cashEl.style.color = '#16a34a'; }
+  if (carbonEl) { carbonEl.textContent = _levelCarbonBudget.toFixed(1) + ' t'; carbonEl.style.color = '#0ea5e9'; }
+  if (bioEl)    { bioEl.textContent    = '0'; bioEl.style.color = '#3d4f72'; }
+  const cashFill   = document.getElementById('b-cash');
+  const carbonFill = document.getElementById('b-carbon');
+  const bioFill    = document.getElementById('b-bio');
+  if (cashFill)   { cashFill.style.width = '100%'; cashFill.style.background = 'linear-gradient(90deg,#16a34a,#4ade80)'; }
+  if (carbonFill) { carbonFill.style.width = '100%'; carbonFill.style.background = 'linear-gradient(90deg,#0ea5e9,#38bdf8)'; }
+  if (bioFill)    { bioFill.style.width = '0%'; bioFill.style.left = '50%'; bioFill.style.right = 'auto'; }
+}
+
+applyLevelConfig('upper_left'); // boot default so createOverlays() has cells to work with
+
+// Grid centroid for camera target (offset -1.5 on both axes = pure screen-down pan)
+const GRID_CX = 4.0 * CELL_SIZE / 2 - 2.25; // = 1.75
+const GRID_CZ = 4.0 * CELL_SIZE / 2 - 2.25; // = 1.75
+
+function cellCenter3D(c, r) {
+  return [(c + 0.5) * CELL_SIZE + _levelGridX, 0, (r + 0.5) * CELL_SIZE];
+}
+
+const NBS_DEFS = {
+  //                                                                                                                                          buildTime noise carbon
+  greenroof:         { label: 'Green Rooftop',      cap: 0.035, req: 'built',  color: '#2ecc71', cat: 'ADAPT',    img: 'green_roof.png',              capLabel: '35 L/m²',  buildTime: 8,  noise: 3, carbon: -2.0 },
+  permeablepavement: { label: 'Permeable Pavement', cap: 0.22,  req: 'sealed', color: '#95a5a6', cat: 'ADAPT',    img: 'depaving_unsealing.png',       capLabel: '220 L/m²', buildTime: 5,  noise: 1, carbon:  1.0 },
+  engineeredsoil:    { label: 'Engineered Soil',    cap: 0.25,  req: 'green',  color: '#e67e22', cat: 'ADAPT',    img: 'structural_soil.png',          capLabel: '250 L/m²', buildTime: 12, noise: 2, carbon: -0.5 },
+  urbanfarming:      { label: 'Urban Farming',      cap: 0.18,  req: 'built',  color: '#27ae60', cat: 'ADAPT',    img: 'green_roof.png',              capLabel: '180 L/m²', buildTime: 10, noise: 4, carbon: -2.5 },
+  greenfacades:      { label: 'Green Facades',      cap: 0.12,  req: 'built',  color: '#9b59b6', cat: 'PRESERVE', img: 'green_roof.png',              capLabel: '120 L/m²', buildTime: 7,  noise: 6, carbon: -0.8 },
+  undergroundtanks:  { label: 'Underground Tank',   cap: 0.50,  req: 'sealed', color: '#2980b9', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '500 L/m²', buildTime: 20, noise: 0, carbon:  8.0, embodied: true },
+  sewersystem:       { label: 'Sewer Upgrade',      cap: 0.35,  req: 'sealed', color: '#7f8c8d', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '350 L/m²', buildTime: 18, noise: 0, carbon:  6.0, embodied: true },
+  wetlands:          { label: 'Wetlands',           cap: 0.60,  req: 'green',  color: '#1a9850', cat: 'PRESERVE', img: 'structural_soil.png',          capLabel: '600 L/m²', buildTime: 25, noise: 2, carbon: -8.0 },
+  riparian:          { label: 'Riparian Buffer',    cap: 0.40,  req: 'green',  color: '#2ecc71', cat: 'PRESERVE', img: 'structural_soil.png',          capLabel: '400 L/m²', buildTime: 15, noise: 1, carbon: -4.0 },
+  terracing:         { label: 'Terracing',          cap: 0.30,  req: 'green',  color: '#d35400', cat: 'ADAPT',    img: 'structural_soil.png',          capLabel: '300 L/m²', buildTime: 18, noise: 3, carbon: -1.5 },
+  leakingdam:        { label: 'Leaking Dam',        cap: 0.35,  req: 'sealed', color: '#8e44ad', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '350 L/m²', buildTime: 22, noise: 0, carbon:  4.5, embodied: true },
+};
+
+// Biodiversity / ecology impact — signed: positive = enhances ecology, negative = damages it
+const NBS_BIO = {
+  wetlands:          10,
+  riparian:           9,
+  greenroof:          6,
+  urbanfarming:       5,
+  greenfacades:       5,
+  terracing:          5,
+  engineeredsoil:     4,
+  permeablepavement:  1,
+  leakingdam:        -3,
+  undergroundtanks:  -6,
+  sewersystem:       -8,
+};
+
+// Flood-mitigation effectiveness per solution — higher values make it easier to reach 50% avg
+const NBS_EFFECTIVENESS = {
+  greenroof:         9,
+  permeablepavement: 10,
+  engineeredsoil:    8,
+  urbanfarming:      6,
+  greenfacades:      5,
+  undergroundtanks:  12,
+  sewersystem:       7,
+  wetlands:          13,
+  riparian:          10,
+  terracing:         9,
+  leakingdam:        9,
+};
+
+// Application coverage (%) per block per solution — read from GLB filename suffixes
+const NBS_APPLICATION_PCT = {
+  1:  { greenroof:  0, permeablepavement: 15, engineeredsoil: 15, urbanfarming:  0, greenfacades:  0, undergroundtanks:   0, sewersystem:   0, wetlands:   0, riparian:   0, terracing: 100, leakingdam: 100 },
+  2:  { greenroof:  0, permeablepavement: 10, engineeredsoil: 10, urbanfarming:  0, greenfacades:  0, undergroundtanks:   0, sewersystem:   0, wetlands:   0, riparian:   0, terracing: 100, leakingdam: 100 },
+  3:  { greenroof:  0, permeablepavement: 10, engineeredsoil: 10, urbanfarming:  0, greenfacades:  0, undergroundtanks:   0, sewersystem:   0, wetlands:   0, riparian:   0, terracing: 100, leakingdam: 100 },
+  4:  { greenroof:  0, permeablepavement: 40, engineeredsoil: 40, urbanfarming:  0, greenfacades:  0, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  5:  { greenroof:  0, permeablepavement: 40, engineeredsoil: 40, urbanfarming:  0, greenfacades:  0, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  6:  { greenroof: 60, permeablepavement: 20, engineeredsoil: 20, urbanfarming: 60, greenfacades: 60, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  7:  { greenroof: 50, permeablepavement: 15, engineeredsoil: 15, urbanfarming: 50, greenfacades: 50, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  8:  { greenroof: 45, permeablepavement: 45, engineeredsoil: 45, urbanfarming: 45, greenfacades: 45, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  9:  { greenroof: 50, permeablepavement: 20, engineeredsoil: 20, urbanfarming: 50, greenfacades: 50, undergroundtanks: 100, sewersystem: 100, wetlands: 100, riparian: 100, terracing:   0, leakingdam:   0 },
+  10: { greenroof: 45, permeablepavement: 35, engineeredsoil: 35, urbanfarming: 45, greenfacades: 45, undergroundtanks: 100, sewersystem: 100, wetlands: 100, riparian: 100, terracing:   0, leakingdam:   0 },
+  11: { greenroof: 45, permeablepavement: 30, engineeredsoil: 30, urbanfarming: 45, greenfacades: 45, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  12: { greenroof: 20, permeablepavement: 40, engineeredsoil: 40, urbanfarming: 20, greenfacades: 20, undergroundtanks: 100, sewersystem: 100, wetlands: 100, riparian: 100, terracing:   0, leakingdam:   0 },
+  13: { greenroof: 45, permeablepavement: 40, engineeredsoil: 40, urbanfarming: 45, greenfacades: 45, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  14: { greenroof: 70, permeablepavement: 20, engineeredsoil: 20, urbanfarming: 70, greenfacades: 70, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  15: { greenroof: 65, permeablepavement: 20, engineeredsoil: 20, urbanfarming: 65, greenfacades: 65, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  16: { greenroof: 65, permeablepavement: 20, engineeredsoil: 20, urbanfarming: 65, greenfacades: 65, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  17: { greenroof: 65, permeablepavement: 20, engineeredsoil: 20, urbanfarming: 65, greenfacades: 65, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  18: { greenroof: 55, permeablepavement: 20, engineeredsoil: 20, urbanfarming: 55, greenfacades: 55, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  19: { greenroof: 55, permeablepavement: 20, engineeredsoil: 20, urbanfarming: 55, greenfacades: 55, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  20: { greenroof:  0, permeablepavement: 15, engineeredsoil: 15, urbanfarming:  0, greenfacades:  0, undergroundtanks:   0, sewersystem:   0, wetlands:   0, riparian:   0, terracing: 100, leakingdam: 100 },
+  21: { greenroof:  0, permeablepavement: 15, engineeredsoil: 15, urbanfarming:  0, greenfacades:  0, undergroundtanks:   0, sewersystem:   0, wetlands:   0, riparian:   0, terracing: 100, leakingdam: 100 },
+  22: { greenroof: 40, permeablepavement: 15, engineeredsoil: 15, urbanfarming: 40, greenfacades: 40, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  23: { greenroof:  0, permeablepavement: 65, engineeredsoil: 65, urbanfarming:  0, greenfacades:  0, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  24: { greenroof: 50, permeablepavement: 30, engineeredsoil: 30, urbanfarming: 50, greenfacades: 50, undergroundtanks: 100, sewersystem: 100, wetlands:   0, riparian:   0, terracing:   0, leakingdam:   0 },
+  25: { greenroof: 75, permeablepavement: 15, engineeredsoil: 15, urbanfarming: 75, greenfacades: 75, undergroundtanks: 100, sewersystem: 100, wetlands: 100, riparian: 100, terracing:   0, leakingdam:   0 },
+  26: { greenroof: 75, permeablepavement: 10, engineeredsoil: 10, urbanfarming: 75, greenfacades: 75, undergroundtanks: 100, sewersystem: 100, wetlands: 100, riparian: 100, terracing:   0, leakingdam:   0 },
+};
+
+
+// Solution costs in credits (1–1000 scale)
+const SOLUTION_COSTS = {
+  greenfacades:      80,
+  urbanfarming:      120,
+  permeablepavement: 150,
+  greenroof:         200,
+  terracing:         200,
+  engineeredsoil:    280,
+  riparian:          350,
+  leakingdam:        450,
+  sewersystem:       550,
+  wetlands:          700,
+  undergroundtanks:  900,
+};
+
+// ── Runoff model ──────────────────────────────────────────────────
+const BASE_L = 350000;
+function estimateRunoff(solutions) {
+  let mit = 0;
+  for (const sol of solutions) {
+    const d = NBS_DEFS[sol]; if (!d) continue;
+    const area = d.req === 'built' ? 4000 : d.req === 'green' ? 1500 : 4500;
+    mit += d.cap * area * 1000;
+  }
+  const rem = Math.max(0, BASE_L - mit);
+  return { base: BASE_L, mit, rem, pct: Math.min(100, (mit / BASE_L) * 100) };
+}
+
+function runoffColor(pct) {
+  if (pct <= 0)  return '#e74c3c';
+  if (pct < 25)  return '#e67e22';
+  if (pct < 50)  return '#f1c40f';
+  if (pct < 75)  return '#2ecc71';
+  return '#1abc9c';
+}
+
+function starRating(pct) {
+  if (pct >= 50) return '★★★';
+  if (pct >= 25) return '★★☆';
+  if (pct >  0)  return '★☆☆';
+  return '☆☆☆';
+}
+
+function fmtL(l) {
+  if (l >= 1e6) return (l/1e6).toFixed(2)+' ML';
+  if (l >= 1e3) return (l/1e3).toFixed(1)+' kL';
+  return Math.round(l)+' L';
+}
+
+// ── Three.js renderer ─────────────────────────────────────────────
+const _canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas: _canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.60;
+renderer.outputEncoding = THREE.sRGBEncoding;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+// ── True isometric OrthographicCamera ────────────────────────────
+// Camera offset equal on all axes → arctan(1/√2) ≈ 35.26° elevation (true iso)
+const _FRUSTUM = 8;
+const _aspect  = window.innerWidth / window.innerHeight;
+const camera   = new THREE.OrthographicCamera(
+  -_FRUSTUM * _aspect / 2,  _FRUSTUM * _aspect / 2,
+   _FRUSTUM / 2,            -_FRUSTUM / 2,
+  0.1, 500
+);
+const _CAM_OFFSET = 12;
+camera.position.set(GRID_CX + _CAM_OFFSET, _CAM_OFFSET, GRID_CZ + _CAM_OFFSET);
+camera.lookAt(GRID_CX, 0, GRID_CZ);
+
+// ── Camera zoom / pan state ───────────────────────────────────────
+const FRUSTUM_DEFAULT = _FRUSTUM;
+const FRUSTUM_ZOOM_IN = 3.5;
+
+let _camF    = _FRUSTUM, _tgtF    = _FRUSTUM;   // animated frustum
+let _camLX   = GRID_CX,  _tgtLX   = GRID_CX;   // animated lookAt X
+let _camLZ   = GRID_CZ,  _tgtLZ   = GRID_CZ;   // animated lookAt Z
+let _zoomTimer = null;
+
+function zoomToCell(c, r) {
+  _tgtF  = FRUSTUM_ZOOM_IN;
+  _tgtLX = (c + 0.5) * CELL_SIZE + _levelGridX - 1.2 + _levelCamX;
+  // camZ overrides the row-based Z entirely (fixes tall patches that go out of frame)
+  _tgtLZ = _levelCamZ !== 0 ? _levelCamZ : (r + 0.5) * CELL_SIZE - 1.2;
+  clearTimeout(_zoomTimer);
+}
+
+function zoomOutToGrid(delay = 2500) {
+  clearTimeout(_zoomTimer);
+  _zoomTimer = setTimeout(() => {
+    _tgtF  = _levelFrustumDefault;
+    _tgtLX = GRID_CX + _levelCamX;
+    _tgtLZ = _levelCamZ !== 0 ? _levelCamZ : GRID_CZ;
+  }, delay);
+}
+
+function _updateCamera() {
+  const L = 0.055;
+  const pF = _camF, pLX = _camLX, pLZ = _camLZ;
+  _camF  += (_tgtF  - _camF)  * L;
+  _camLX += (_tgtLX - _camLX) * L;
+  _camLZ += (_tgtLZ - _camLZ) * L;
+  const moved = Math.abs(_camF - pF) > 1e-4 || Math.abs(_camLX - pLX) > 1e-4 || Math.abs(_camLZ - pLZ) > 1e-4;
+  const a = window.innerWidth / window.innerHeight;
+  camera.left   = -_camF * a / 2;  camera.right  = _camF * a / 2;
+  camera.top    =  _camF / 2;      camera.bottom = -_camF / 2;
+  camera.updateProjectionMatrix();
+  camera.position.set(_camLX + _CAM_OFFSET, _CAM_OFFSET, _camLZ + _CAM_OFFSET);
+  camera.lookAt(_camLX, 0, _camLZ);
+  if (moved || _camDirty) { positionOverlays(); _camDirty = false; }
+}
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  _camDirty = true; // force overlay reposition on next frame
+});
+
+// ── Lighting ──────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+
+const _sun = new THREE.DirectionalLight(0xfff0d0, 0.90);
+_sun.position.set(GRID_CX + 12, 20, GRID_CZ - 4);
+_sun.castShadow = true;
+_sun.shadow.mapSize.set(2048, 2048);
+_sun.shadow.camera.left   = -12; _sun.shadow.camera.right  = 12;
+_sun.shadow.camera.top    =  12; _sun.shadow.camera.bottom = -12;
+_sun.shadow.camera.near   = 0.5; _sun.shadow.camera.far    = 80;
+_sun.shadow.bias = -0.001;
+scene.add(_sun);
+
+const _fill = new THREE.DirectionalLight(0x8898ff, 0.18);
+_fill.position.set(GRID_CX - 10, 8, GRID_CZ + 10);
+scene.add(_fill);
+
+// ── Ground (fallback — hidden once context.glb loads) ────────────
+const _ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(28, 24),
+  new THREE.MeshStandardMaterial({ color: 0x141824, roughness: 1, metalness: 0 })
+);
+_ground.rotation.x = -Math.PI / 2;
+_ground.position.set(GRID_CX, -0.02, GRID_CZ);
+_ground.receiveShadow = true;
+scene.add(_ground);
+
+// ── Context diorama base ──────────────────────────────────────────
+// Blender: 10 units per cell, 9.5 unit block footprint
+// Three.js: CELL_SIZE = 2.0 → scale = 2.0/10 = 0.2
+const CTX_SCALE = CELL_SIZE / 10;  // 0.2
+
+let _ctxMesh = null;
+
+function loadContextModel(levelId) {
+  if (_ctxMesh) { scene.remove(_ctxMesh); _ctxMesh = null; }
+  const loader = new THREE.GLTFLoader();
+  loader.load(`assets/models/${levelId}/context_${levelId}.glb`, gltf => {
+    const ctx = gltf.scene;
+    ctx.traverse(child => {
+      if (!child.isMesh) return;
+      child.castShadow    = true;
+      child.receiveShadow = true;
+      if (child.material.map) child.material.map.encoding = THREE.sRGBEncoding;
+    });
+    ctx.scale.setScalar(CTX_SCALE);
+    ctx.updateMatrixWorld(true);
+    const bbox   = new THREE.Box3().setFromObject(ctx);
+    const center = bbox.getCenter(new THREE.Vector3());
+    const off = (LEVEL_CONFIGS[levelId] || {}).ctx || { x: 0, y: -0.1, z: 1.0 };
+    ctx.position.x = (4 * CELL_SIZE / 2) - center.x + off.x;
+    ctx.position.y = -bbox.min.y + off.y;
+    ctx.position.z = (4 * CELL_SIZE / 2) - center.z + off.z;
+    scene.add(ctx);
+    _ctxMesh = ctx;
+    _ground.visible = false;
+  }, undefined, err => {
+    console.warn(`[3D] context_${levelId}.glb not found:`, err);
+  });
+}
+
+// ── HTML cell overlays ────────────────────────────────────────────
+const overlayEls = {};
+
+function createOverlays() {
+  const container = document.getElementById('overlays');
+  for (const {c, r} of CELLS) {
+    const key = `${c}_${r}`;
+    const div = document.createElement('div');
+    div.className = 'map-cell';
+    div.id = `ov_${key}`;
+    container.appendChild(div);
+    overlayEls[key] = div;
+
+  }
+  positionOverlays();
+}
+
+function rebuildOverlays() {
+  document.getElementById('overlays').innerHTML = '';
+  Object.keys(overlayEls).forEach(k => delete overlayEls[k]);
+  createOverlays();
+}
+
+
+const _projV = new THREE.Vector3(); // reused across every positionOverlays call
+let _camDirty = true;               // set true whenever camera target changes
+
+function positionOverlays() {
+  const W = window.innerWidth, H = window.innerHeight;
+  for (const {c, r} of CELLS) {
+    const key = `${c}_${r}`;
+    const el = overlayEls[key]; if (!el) continue;
+    // Project all 4 ground corners to screen space
+    const corners = [
+      [c * CELL_SIZE + _levelGridX,       r * CELL_SIZE      ],
+      [(c + 1) * CELL_SIZE + _levelGridX, r * CELL_SIZE      ],
+      [(c + 1) * CELL_SIZE + _levelGridX, (r + 1) * CELL_SIZE],
+      [c * CELL_SIZE + _levelGridX,       (r + 1) * CELL_SIZE],
+    ].map(([x, z]) => {
+      _projV.set(x, 0, z).project(camera);
+      return { sx: (_projV.x + 1) / 2 * W, sy: (1 - _projV.y) / 2 * H };
+    });
+    const minX = Math.min(...corners.map(p => p.sx));
+    const maxX = Math.max(...corners.map(p => p.sx));
+    const minY = Math.min(...corners.map(p => p.sy));
+    const maxY = Math.max(...corners.map(p => p.sy));
+    el.style.left   = minX + 'px';
+    el.style.top    = minY + 'px';
+    el.style.width  = (maxX - minX) + 'px';
+    el.style.height = (maxY - minY) + 'px';
+
+  }
+}
+
+const overlayState = {};
+
+function setOverlayCard(col, row, solutions) {
+  const key = `${col}_${row}`;
+  const el  = overlayEls[key]; if (!el) return;
+  const sig = JSON.stringify(solutions);
+  if (overlayState[key] === sig) return;
+  overlayState[key] = sig;
+
+  if (!solutions || solutions.length === 0) {
+    const old = el.querySelector('.map-card');
+    if (old) {
+      old.classList.add('anim-remove');
+      setTimeout(() => { el.innerHTML = ''; }, 280);
+    }
+    el.style.borderColor = 'rgba(244,196,48,0.25)';
+    el.classList.remove('occupied');
+    return;
+  }
+
+  const { pct } = estimateRunoff(solutions);
+  const color = runoffColor(pct);
+  const def   = NBS_DEFS[solutions[0]];
+  const stars = starRating(pct);
+
+  el.style.borderColor = color;
+  el.classList.add('occupied');
+
+  const card = document.createElement('div');
+  card.className = 'map-card anim-drop';
+  card.style.background = color + '22';
+  card.innerHTML = `
+    <div class="map-card-label" style="color:${color}">${def ? def.label : solutions[0]}</div>
+    <div class="map-card-pct"  style="color:${color}">−${pct.toFixed(0)}%</div>
+    <div class="map-card-stars" style="color:${color}">${stars}</div>`;
+
+  el.innerHTML = '';
+  el.appendChild(card);
+}
+
+// ── Three.js grid outlines ────────────────────────────────────────
+(function buildGrid() {
+  const mat = new THREE.LineBasicMaterial({ color: 0xC9952A, transparent: true, opacity: 0.55 });
+  for (const {c, r} of CELLS) {
+    const x = c * CELL_SIZE, z = r * CELL_SIZE, s = CELL_SIZE;
+    const pts = [
+      new THREE.Vector3(x,   0, z  ), new THREE.Vector3(x+s, 0, z  ),
+      new THREE.Vector3(x+s, 0, z+s), new THREE.Vector3(x,   0, z+s),
+      new THREE.Vector3(x,   0, z  )
+    ];
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+  }
+})();
+
+// ── Water plane ───────────────────────────────────────────────────
+const _waterPlane = new THREE.Mesh(
+  new THREE.PlaneGeometry(600, 600),
+  new THREE.MeshBasicMaterial({ color: 0x162844, transparent: true, opacity: 0.92,
+    side: THREE.DoubleSide, depthWrite: false })
+);
+_waterPlane.rotation.x = -Math.PI / 2;
+_waterPlane.position.set(GRID_CX, 0, GRID_CZ);
+_waterPlane.visible = false;
+scene.add(_waterPlane);
+
+// ── Rain + Splash system ──────────────────────────────────────────
+const RAIN_COUNT    = 3500;
+const RAIN_TOP_Y    = 14;
+const RAIN_STREAK   = 0.32;
+const RAIN_WIND_X   =  0.12;   // horizontal drift per unit fallen (X axis)
+const RAIN_WIND_Z   = -0.06;   // slight Z drift
+const _rainPos      = new Float32Array(RAIN_COUNT * 6);  // top+bottom per drop
+const _rainMeta     = new Float32Array(RAIN_COUNT * 3);  // x, z, speed
+
+(function _initRain() {
+  for (let i = 0; i < RAIN_COUNT; i++) {
+    const x = Math.random() * 26 - 6, z = Math.random() * 20 - 6;
+    const y = Math.random() * RAIN_TOP_Y;
+    const s = 0.09 + Math.random() * 0.08;
+    _rainMeta[i*3]=x; _rainMeta[i*3+1]=z; _rainMeta[i*3+2]=s;
+    // top point
+    _rainPos[i*6]=x;   _rainPos[i*6+1]=y;             _rainPos[i*6+2]=z;
+    // bottom point — offset by wind × streak length
+    _rainPos[i*6+3]=x + RAIN_WIND_X * RAIN_STREAK;
+    _rainPos[i*6+4]=y - RAIN_STREAK;
+    _rainPos[i*6+5]=z + RAIN_WIND_Z * RAIN_STREAK;
+  }
+})();
+
+const _rainGeo  = new THREE.BufferGeometry();
+_rainGeo.setAttribute('position', new THREE.BufferAttribute(_rainPos, 3));
+const _rainMat  = new THREE.LineBasicMaterial({ color: 0xaacce8, transparent: true, opacity: 0.58 });
+const _rainMesh = new THREE.LineSegments(_rainGeo, _rainMat);
+_rainMesh.visible = false;
+scene.add(_rainMesh);
+
+// Splash ring pool
+const SPLASH_COUNT = 24;
+const _splashPool  = [];
+const _splashGeo   = new THREE.RingGeometry(0.04, 0.11, 16);
+_splashGeo.rotateX(-Math.PI / 2);
+
+for (let i = 0; i < SPLASH_COUNT; i++) {
+  const mat  = new THREE.MeshBasicMaterial({
+    color: 0xaad4f0, transparent: true, opacity: 0,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(_splashGeo, mat);
+  mesh.visible = false;
+  scene.add(mesh);
+  _splashPool.push({ mesh, mat, active: false, t0: 0 });
+}
+
+let _lastSplashMs = 0;
+
+function _spawnSplash(wy) {
+  const s = _splashPool.find(s => !s.active);
+  if (!s) return;
+  s.mesh.position.set(Math.random() * 10, wy + 0.04, Math.random() * 8);
+  s.mesh.scale.setScalar(0.08);
+  s.mat.opacity = 0.8;
+  s.mesh.visible = true;
+  s.active = true;
+  s.t0 = Date.now();
+}
+
+function _updateRainAndSplash(now) {
+  _rainMesh.visible = floodRunning;
+  if (!floodRunning) {
+    _splashPool.forEach(s => { if (s.active) { s.active = false; s.mesh.visible = false; } });
+    return;
+  }
+
+  const wy    = _waterPlane.position.y;
+  const floor = _waterPlane.visible ? wy : -0.5;
+  const attr  = _rainGeo.attributes.position;
+
+  for (let i = 0; i < RAIN_COUNT; i++) {
+    const s  = _rainMeta[i*3+2];
+    let   y  = _rainPos[i*6+1] - s;
+    let   x  = _rainMeta[i*3];
+    let   z  = _rainMeta[i*3+1];
+    if (y - RAIN_STREAK < floor) {
+      // reset to top, random X/Z
+      x = Math.random() * 26 - 6; _rainMeta[i*3] = x;
+      z = Math.random() * 20 - 6; _rainMeta[i*3+1] = z;
+      y = RAIN_TOP_Y + Math.random() * 5;
+    } else {
+      // drift horizontally with wind
+      x += RAIN_WIND_X * s; _rainMeta[i*3] = x;
+      z += RAIN_WIND_Z * s; _rainMeta[i*3+1] = z;
+    }
+    _rainPos[i*6]   = x;   _rainPos[i*6+1] = y;             _rainPos[i*6+2] = z;
+    _rainPos[i*6+3] = x + RAIN_WIND_X * RAIN_STREAK;
+    _rainPos[i*6+4] = y - RAIN_STREAK;
+    _rainPos[i*6+5] = z + RAIN_WIND_Z * RAIN_STREAK;
+  }
+  attr.needsUpdate = true;
+
+  // Spawn splashes on the water surface
+  if (_waterPlane.visible && now - _lastSplashMs > 85) {
+    _spawnSplash(wy);
+    _lastSplashMs = now;
+  }
+
+  // Animate active splashes
+  for (const s of _splashPool) {
+    if (!s.active) continue;
+    const t = (now - s.t0) / 650;
+    if (t >= 1) { s.active = false; s.mesh.visible = false; continue; }
+    s.mesh.scale.setScalar(0.08 + t * 2.0);
+    s.mat.opacity = 0.75 * (1 - t * t);
+    s.mesh.position.y = wy + 0.04;
+  }
+}
+
+
+// ── Render loop (started at boot, after all definitions) ─────────
+const FLOOD_VISUAL_MAX = 2.5;
+let _waterReady = false;   // delayed 2 s after flood starts so models land first
+
+// ── Character system (removed) ────────────────────────────────────
+/* const charMgr = (() => {
+  const WALK_SPEED = 0.9;
+  const NUM_CHARS  = 12;
+  const FLOAT_H    = 0.14;
+  const SPR_W      = 0.22;   // world-unit width of sprite
+  const SPR_H      = 0.38;   // world-unit height
+  const SHIRT_COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6',
+                         '#e67e22','#1abc9c','#c0392b','#16a085','#d35400',
+                         '#8e44ad','#27ae60'];
+  let chars = [];
+
+  // Draw a tiny pixel-person onto a 24×40 canvas; returns CanvasTexture
+  // frame: 0 = legs together, 1 = left leg fwd, 2 = right leg fwd
+  function _makeTex(shirt, frame) {
+    const W = 24, H = 40;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const cx = cv.getContext('2d');
+
+    // head
+    cx.fillStyle = '#f5cba7';
+    cx.beginPath(); cx.arc(12, 7, 5, 0, Math.PI * 2); cx.fill();
+    // eyes
+    cx.fillStyle = '#2c3e50';
+    cx.fillRect(9, 6, 2, 2); cx.fillRect(13, 6, 2, 2);
+
+    // body (shirt)
+    cx.fillStyle = shirt;
+    cx.fillRect(7, 13, 10, 10);
+
+    // arms — wave when floating (frame 3)
+    cx.fillStyle = shirt;
+    if (frame === 3) {
+      // arms up
+      cx.fillRect(3, 10, 4, 3); cx.fillRect(17, 10, 4, 3);
+    } else {
+      cx.fillRect(3, 13, 4, 8); cx.fillRect(17, 13, 4, 8);
+    }
+
+    // pants
+    cx.fillStyle = '#2c3e50';
+    if (frame === 0) {
+      cx.fillRect(7, 23, 4, 12); cx.fillRect(13, 23, 4, 12);
+    } else if (frame === 1) {
+      // left leg fwd
+      cx.fillRect(5, 23, 4, 12); cx.fillRect(15, 23, 4, 12);
+    } else {
+      // right leg fwd
+      cx.fillRect(9, 23, 4, 12); cx.fillRect(11, 23, 4, 12);
+    }
+
+    // shoes
+    cx.fillStyle = '#1a1a1a';
+    if (frame === 1) {
+      cx.fillRect(4, 34, 6, 3); cx.fillRect(14, 34, 6, 3);
+    } else {
+      cx.fillRect(6, 34, 6, 3); cx.fillRect(13, 34, 6, 3);
+    }
+
+    const tex = new THREE.CanvasTexture(cv);
+    return tex;
+  }
+
+  function _rndTarget() {
+    const cell = CELLS[Math.floor(Math.random() * CELLS.length)];
+    return new THREE.Vector3(
+      (cell.c + 0.15 + Math.random() * 0.7) * CELL_SIZE,
+      0,
+      (cell.r + 0.15 + Math.random() * 0.7) * CELL_SIZE
+    );
+  }
+
+  function _makeSprite(shirt) {
+    // pre-bake walk frames + float frame
+    const texFrames = [
+      _makeTex(shirt, 0),
+      _makeTex(shirt, 1),
+      _makeTex(shirt, 2),
+      _makeTex(shirt, 3),
+    ];
+    const mat  = new THREE.SpriteMaterial({ map: texFrames[0], transparent: true });
+    const spr  = new THREE.Sprite(mat);
+    spr.scale.set(SPR_W, SPR_H, 1);
+    return { spr, mat, texFrames };
+  }
+
+  function init() {
+    chars.forEach(c => { scene.remove(c.spr); c.texFrames.forEach(t => t.dispose()); });
+    chars = [];
+    for (let i = 0; i < NUM_CHARS; i++) {
+      const { spr, mat, texFrames } = _makeSprite(SHIRT_COLORS[i % SHIRT_COLORS.length]);
+      const target = _rndTarget();
+      spr.position.copy(target);
+      spr.position.y = SPR_H * 0.5;
+      scene.add(spr);
+      chars.push({ spr, mat, texFrames, target, state: 'roaming',
+                   animT: Math.random() * 4000,
+                   floatPhase: Math.random() * Math.PI * 2,
+                   deathT: 0, lastFrame: 0 });
+    }
+  }
+
+  function killAll() {
+    chars.forEach(c => { c.state = 'dying'; c.deathT = 0; });
+  }
+
+  function update(dt, waterY) {
+    for (const c of chars) {
+      c.animT += dt;
+      const pos = c.spr.position;
+
+      if (c.state === 'roaming') {
+        if (waterY > pos.y - SPR_H * 0.3) { c.state = 'floating'; continue; }
+
+        const dx = c.target.x - pos.x, dz = c.target.z - pos.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < 0.1) { c.target = _rndTarget(); continue; }
+        const spd = Math.min(WALK_SPEED * dt / 1000, dist);
+        pos.x += dx / dist * spd;
+        pos.z += dz / dist * spd;
+        pos.y  = SPR_H * 0.5;
+
+        // Alternate walk frames every ~220 ms
+        const frame = Math.floor(c.animT / 220) % 2 + 1;
+        if (frame !== c.lastFrame) {
+          c.mat.map = c.texFrames[frame];
+          c.mat.needsUpdate = true;
+          c.lastFrame = frame;
+        }
+
+      } else if (c.state === 'floating') {
+        if (waterY < pos.y - SPR_H * 0.8) { c.state = 'roaming'; pos.y = SPR_H * 0.5; continue; }
+        c.floatPhase += dt * 0.0018;
+        pos.y = waterY + FLOAT_H + Math.sin(c.floatPhase) * 0.05;
+        // Slow drift
+        const dx = c.target.x - pos.x, dz = c.target.z - pos.z;
+        const d  = Math.sqrt(dx * dx + dz * dz);
+        if (d > 0.1) { pos.x += dx / d * 0.05 * dt / 1000; pos.z += dz / d * 0.05 * dt / 1000; }
+        else c.target = _rndTarget();
+        // Use arms-up frame
+        if (c.lastFrame !== 3) {
+          c.mat.map = c.texFrames[3];
+          c.mat.needsUpdate = true;
+          c.lastFrame = 3;
+        }
+
+      } else if (c.state === 'dying') {
+        c.deathT += dt;
+        const t = Math.min(c.deathT / 2500, 1);
+        pos.y = (waterY + FLOAT_H) - t * 1.2;
+        c.mat.rotation = t * Math.PI * 0.6;
+        if (t > 0.6) {
+          c.mat.opacity = 1 - (t - 0.6) / 0.4;
+        }
+      }
+    }
+  }
+
+  return { init, update, killAll };
+})(); */
+
+let _lastNow = Date.now();
+let _gameRenderActive = true; // paused while level-select renderer is running
+
+function _animate() {
+  requestAnimationFrame(_animate);
+  if (!_gameRenderActive) return; // yield GPU to level-select renderer
+  const now = Date.now();
+  const dt  = Math.min(now - _lastNow, 100);
+  _lastNow  = now;
+
+  // Flood physics (merged from setInterval — runs in sync with display refresh)
+  if (floodRunning) {
+    const dtSec = Math.min(dt / 1000, 0.2);
+    const baseRate  = FLOOD_MAX_H / FLOOD_SECS;
+    const drainRate = baseRate * (100 / 25); // equilibrium at 25%: drains proportionally above that
+    floodLevel = Math.min(FLOOD_MAX_H, Math.max(0,
+      floodLevel + (baseRate - drainRate * (getAvgMitPct() / 100)) * dtSec
+    ));
+    if (floodLevel >= FLOOD_MAX_H && !floodDrowned) {
+      floodDrowned = true; setAllDrowned(true); addLog('💀 CITY FLOODED');
+    } else if (floodDrowned && floodLevel < FLOOD_MAX_H * 0.7) {
+      floodDrowned = false; setAllDrowned(false); addLog('💧 Flood receding…');
+    }
+    updateStormTimer();
+  }
+
+  modelMgr.update(now);
+  modelMgr.updateLiveRings();
+  _waterPlane.visible = floodRunning && _waterReady;
+  const waterVisY = _levelWaterBase + (floodLevel / FLOOD_MAX_H) * FLOOD_VISUAL_MAX;
+  _waterPlane.position.y = waterVisY;
+  _updateRainAndSplash(now);
+  _updateCamera();
+  renderer.render(scene, camera);
+}
+
+// ── Notification card (CoC style) ────────────────────────────────
+const NBS_FACTS = {
+  greenroof:         "Soil and plants absorb rainfall before it hits drains — retaining up to 80% of light rain events on rooftops.",
+  permeablepavement: "Water passes straight through the surface into the ground — eliminating runoff right where rain falls.",
+  engineeredsoil:    "A specially mixed soil layer boosts infiltration, but only works where there is existing green space to dig into.",
+  urbanfarming:      "Crop beds hold some moisture, but the planted area is small — runoff reduction is a side effect, not the main purpose.",
+  greenfacades:      "Climbing plants intercept a thin film of rain but hold very little volume — most water still runs off the wall.",
+  undergroundtanks:  "Sealed cisterns capture large volumes of stormwater reliably regardless of weather — the highest capacity option.",
+  sewersystem:       "Bigger pipes move water away faster, but they just push the flood problem further downstream.",
+  wetlands:          "Nature's best sponge — wetland plants and soils absorb, filter, and slowly release water with near-perfect efficiency.",
+  riparian:          "Riverside vegetation slows runoff, stabilises banks, and filters pollutants before water reaches the channel.",
+  terracing:         "Step-cut slopes break the speed of sheet flow, giving rainfall time to soak in rather than rush downhill.",
+  leakingdam:        "A check dam holds water back and releases it slowly, dramatically smoothing out the flood peak downstream.",
+};
+
+function rebuildSummaryPanel() {
+  const panel  = document.getElementById('summary-panel');
+  const list   = document.getElementById('summary-list');
+  const pctEl  = document.getElementById('summary-pct');
+  const fillEl = document.getElementById('summary-fill');
+  if (!panel) return;
+
+  // Snapshot existing row keys so we can animate only new arrivals
+  const existing = new Set([...list.querySelectorAll('.sol-row')].map(el => el.id));
+
+  list.innerHTML = '';
+  let hasAny = false;
+
+  for (const {c, r} of CELLS) {
+    const key  = `${c}_${r}`;
+    const sols = (lastState[key] || {}).solutions || [];
+    if (!sols.length) continue;
+    hasAny = true;
+
+    const sol = sols[0];
+    const def = NBS_DEFS[sol]; if (!def) continue;
+    const n      = CELL_KEY_TO_BLOCK[key];
+    const eff    = NBS_EFFECTIVENESS[sol] || 0;
+    const appPct = (NBS_APPLICATION_PCT[n] || {})[sol] || 0;
+    const blockEff = Math.min(100, Math.round((eff / 10) * appPct));
+    const effColor = blockEff >= 60 ? '#4ade80' : blockEff >= 30 ? '#fbbf24' : '#f87171';
+    const isNew  = !existing.has(`sr_${key}`);
+
+    const row = document.createElement('div');
+    row.className = 'sol-row' + (isNew ? ' sol-row-new' : '');
+    row.id = `sr_${key}`;
+    row.innerHTML = `
+      <span class="sol-dot" style="background:${def.color}"></span>
+      <div class="sol-info">
+        <div class="sol-name">${def.label}</div>
+        <div class="sol-meta">Block ${n} · <span class="sol-eff" style="color:${effColor}">${blockEff}%</span></div>
+      </div>
+      <button class="sol-x" title="Remove">✕</button>`;
+    row.querySelector('.sol-x').addEventListener('click', () => removeSolution(c, r));
+    list.appendChild(row);
+  }
+
+  const total = getAvgMitPct();
+  pctEl.textContent = `${total.toFixed(2)}%`;
+  fillEl.style.width = `${Math.min(100, total)}%`;
+  fillEl.style.background = total >= 50
+    ? 'linear-gradient(90deg,#4ade80,#22d3ee)'
+    : total >= 25
+    ? 'linear-gradient(90deg,#fbbf24,#4ade80)'
+    : 'linear-gradient(90deg,#f87171,#fbbf24)';
+  fillEl.style.boxShadow = total >= 50
+    ? '0 0 10px rgba(74,222,128,0.5)'
+    : '0 0 10px rgba(251,191,36,0.35)';
+
+  panel.classList.toggle('has-solutions', hasAny);
+}
+
+// ── Side panel cards ──────────────────────────────────────────────
+const cardEls = {};
+
+function buildSideCards() {
+  const container = document.getElementById('cells');
+  for (const {c, r} of CELLS) {
+    const key = `${c}_${r}`;
+    const n   = CELL_KEY_TO_BLOCK[key];
+    const div = document.createElement('div');
+    div.className = 'cell-card';
+    div.innerHTML = `
+      <div class="cell-header">
+        <span class="cell-coord">Block ${n}</span>
+        <span class="cell-nbs" id="cnbs_${key}">—</span>
+      </div>
+      <div id="cstats_${key}" style="font-size:8px;color:#5a4020;">Empty</div>`;
+    container.appendChild(div);
+    cardEls[key] = div;
+  }
+}
+
+function updateSideCard(col, row, solutions, geeData) {
+  const key = `${col}_${row}`;
+  const card = cardEls[key];
+  const nbsEl   = document.getElementById(`cnbs_${key}`);
+  const statsEl = document.getElementById(`cstats_${key}`);
+  if (!card) return;
+
+  if (!solutions || solutions.length === 0) {
+    card.className = 'cell-card';
+    nbsEl.textContent = '—'; nbsEl.style.color = '#5a4020';
+    statsEl.innerHTML = '<span style="color:#3a2010;">Empty</span>';
+    return;
+  }
+  const def = NBS_DEFS[solutions[0]];
+  card.className = 'cell-card active';
+  nbsEl.textContent = def ? def.label : solutions[0];
+  nbsEl.style.color = def ? def.color : '#eee';
+
+  const est = estimateRunoff(solutions);
+  const src  = (geeData && geeData.totalLiters) ? geeData : null;
+  const base = src ? src.totalLiters : est.base;
+  let mit = 0;
+  for (const sol of solutions) {
+    const d = NBS_DEFS[sol]; if (!d) continue;
+    const area = src
+      ? (d.req==='built' ? src.builtArea||4000 : d.req==='green' ? src.greenArea||1500 : src.sealedArea||4500)
+      : (d.req==='built' ? 4000 : d.req==='green' ? 1500 : 4500);
+    mit += d.cap * area * 1000;
+  }
+  const pct = base > 0 ? Math.min(100, mit/base*100).toFixed(1) : 0;
+  const stars = starRating(parseFloat(pct));
+  statsEl.innerHTML = `
+    <div class="cell-stat"><span>Runoff</span><span>${fmtL(base)}</span></div>
+    <div class="cell-stat"><span>Mitigation</span><span style="color:#7FE07F">−${fmtL(mit)}</span></div>
+    <div class="cell-stat"><span>${stars} ${pct}% reduced</span><span>${src?'✦ GEE':''}</span></div>
+    ${def.noise ? `<div class="cell-stat"><span>🔇 Noise</span><span style="color:#22d3ee">−${def.noise} dB</span></div>` : ''}
+    <div class="cell-stat"><span>${def.embodied ? '⚠ Carbon' : '🌿 Carbon'}</span><span style="color:${def.embodied ? '#f87171' : '#4ade80'}">${def.embodied ? '+' : '−'}${def.carbon} tCO₂${def.embodied ? ' build' : '/yr'}</span></div>`;
+}
+
+// ── Panel metrics ─────────────────────────────────────────────────
+
+function updateMetrics(state) {
+  let spent = 0, carbon = 0, bioTotal = 0;
+
+  for (const {c, r} of CELLS) {
+    const sols = ((state[`${c}_${r}`] || {}).solutions || []);
+    if (!sols.length) continue;
+    const sol = sols[0];
+    const def = NBS_DEFS[sol]; if (!def) continue;
+    spent  += SOLUTION_COSTS[sol] || 0;
+    carbon += def.carbon;
+    // Fixed score per solution (green +, grey −) rather than scaled by coverage %:
+    // grey applies at 100% almost everywhere while green is often 0–50%, which made
+    // one grey placement outweigh several green ones. 0% coverage = not built = no effect.
+    const n      = CELL_KEY_TO_BLOCK[`${c}_${r}`];
+    const appPct = (NBS_APPLICATION_PCT[n] || {})[sol] || 0;
+    if (appPct > 0) bioTotal += NBS_BIO[sol] || 0;
+  }
+
+  const rawCash       = _levelBudget - spent;
+  const cash          = Math.max(0, rawCash);
+  const carbonBalance = _levelCarbonBudget - carbon;
+  const bio           = bioTotal; // signed
+  _budgetCash   = rawCash;
+  _budgetCarbon = carbonBalance;
+  _budgetBio    = bio;
+
+  // ── Text values ──────────────────────────────────────────────────
+  const cashEl   = document.getElementById('v-cash');
+  const carbonEl = document.getElementById('v-carbon');
+  const bioEl    = document.getElementById('v-bio');
+  if (cashEl)   cashEl.textContent = cash.toLocaleString();
+  if (carbonEl) carbonEl.textContent = carbonBalance.toFixed(1) + ' t';
+
+  // ── Bar fills ─────────────────────────────────────────────────────
+  const cashFill   = document.getElementById('b-cash');
+  const carbonFill = document.getElementById('b-carbon');
+  const bioFill    = document.getElementById('b-bio');
+
+  if (cashFill) {
+    const pct = Math.max(0, Math.min(100, (cash / _levelBudget) * 100));
+    cashFill.style.width = pct + '%';
+    // green → amber → red as budget depletes
+    cashFill.style.background = pct > 60
+      ? 'linear-gradient(90deg,#16a34a,#4ade80)'
+      : pct > 25
+      ? 'linear-gradient(90deg,#d97706,#fbbf24)'
+      : 'linear-gradient(90deg,#dc2626,#f87171)';
+    if (cashEl) cashEl.style.color = pct > 60 ? '#16a34a' : pct > 25 ? '#d97706' : '#dc2626';
+  }
+
+  if (carbonFill) {
+    const pct = Math.max(0, Math.min(100, (carbonBalance / _levelCarbonBudget) * 100));
+    carbonFill.style.width = pct + '%';
+    // green when credits remain, red when over limit
+    carbonFill.style.background = carbonBalance < 0
+      ? 'linear-gradient(90deg,#dc2626,#f87171)'
+      : carbonBalance > _levelCarbonBudget
+      ? 'linear-gradient(90deg,#16a34a,#4ade80)'
+      : 'linear-gradient(90deg,#0ea5e9,#38bdf8)';
+    if (carbonEl) carbonEl.style.color = carbonBalance < 0 ? '#dc2626' : carbonBalance > _levelCarbonBudget ? '#16a34a' : '#0ea5e9';
+  }
+
+  if (bioFill) {
+    const MAX_BIO = 30; // a few green solutions should visibly fill the bar
+    const fillPct = Math.min(50, Math.abs(bio) / MAX_BIO * 50);
+    bioFill.style.width = fillPct + '%';
+    if (bio >= 0) {
+      bioFill.style.left  = '50%';
+      bioFill.style.right = 'auto';
+      bioFill.style.background = 'linear-gradient(90deg,#16a34a,#4ade80)';
+    } else {
+      bioFill.style.right = '50%';
+      bioFill.style.left  = 'auto';
+      bioFill.style.background = 'linear-gradient(270deg,#dc2626,#f87171)';
+    }
+    if (bioEl) {
+      bioEl.textContent = (bio > 0 ? '+' : '') + bio;
+      bioEl.style.color = bio > 0 ? '#16a34a' : bio < 0 ? '#dc2626' : '#3d4f72';
+    }
+  }
+}
+
+function isAnyBudgetExceeded() {
+  return _budgetCash < 0 || _budgetCarbon < 0 || _budgetBio < -15;
+}
+
+function isDuplicateInPatch(solType, state, skipKey) {
+  if (!_currentLevel) return false;
+  for (const {c, r} of (LEVEL_CONFIGS[_currentLevel].cells || [])) {
+    const key = `${c}_${r}`;
+    if (key === skipKey) continue;
+    if (((state[key] || {}).solutions || []).includes(solType)) return true;
+  }
+  return false;
+}
+
+let _budgetWarnTimer = null;
+function _flashWarning(msg) {
+  const el = document.getElementById('budget-warning');
+  if (!el) return;
+  el.querySelector('.bw-text').textContent = msg;
+  el.classList.remove('bw-show');
+  void el.offsetWidth;
+  el.classList.add('bw-show');
+  clearTimeout(_budgetWarnTimer);
+  _budgetWarnTimer = setTimeout(() => el.classList.remove('bw-show'), 4500);
+  const mp = document.getElementById('metrics-panel');
+  if (mp) { mp.classList.remove('metric-shake'); void mp.offsetWidth; mp.classList.add('metric-shake'); }
+}
+
+function flashBudgetWarning() {
+  const msgs = [];
+  if (_budgetCash   < 0) msgs.push('City Budget');
+  if (_budgetCarbon < 0) msgs.push('Carbon Credits');
+  if (_budgetBio  < -15) msgs.push('Biodiversity'); // same threshold as isAnyBudgetExceeded
+  _flashWarning((msgs.join(', ') || 'Budget') + ' exceeded — remove or replace a solution');
+}
+
+function flashDuplicateWarning(solType) {
+  _flashWarning(`${solType} is already placed in this patch — each solution type can only be used once per patch`);
+}
+
+function easeOutBack(t) {
+  const c1 = 0.45; // reduced from 1.70158 — gentle land, no underground sink
+  return 1 + (c1 + 1) * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+// ── Model URLs ────────────────────────────────────────────────────
+const MODEL_BASE = (c, r) => {
+  const n = CELL_KEY_TO_BLOCK[`${c}_${r}`];
+  return n ? `assets/models/${_currentLevel}/block_${n}_base.glb` : null;
+};
+const SOL_SUFFIX = {
+  greenroof:         'greenroof',
+  permeablepavement: 'permeable',
+  engineeredsoil:    'engineered',
+  urbanfarming:      'urbanfarm',
+  greenfacades:      'greenfacade',
+  undergroundtanks:  'undergroundtanks',
+  sewersystem:       'sewersystem',
+  wetlands:          'wetlands',
+  riparian:          'riparian',
+  terracing:         'terracing',
+  leakingdam:        'leakingdam',
+};
+const MODEL_NBS = (c, r, sol) => {
+  const n      = CELL_KEY_TO_BLOCK[`${c}_${r}`];
+  const suffix = SOL_SUFFIX[sol];
+  if (!n || !suffix) return MODEL_BASE(c, r);
+  const appPct = (NBS_APPLICATION_PCT[n] || {})[sol] ?? 0;
+  return `assets/models/${_currentLevel}/block_${n}_${suffix}_${appPct}.glb`;
+};
+
+// ── Model manager (CoC construction system) ──────────────────────
+const modelMgr = {
+  cells:  {},
+  loader: new THREE.GLTFLoader(),
+
+  init() {
+    CELLS.forEach(({c, r}, i) => {
+      const key = `${c}_${r}`;
+      const [x, , z] = cellCenter3D(c, r);
+      this.cells[key] = {
+        c, r, x, z,
+        targetSize:   CELL_SIZE * 0.95,
+        displayedUrl: null,
+        mesh:         null,
+        scaleXZ:      1,
+        departing:    null,
+        pending:      null,
+        meshAnim:     null,
+        loadEpoch:    0,
+      };
+      setTimeout(() => this._loadMesh(c, r, MODEL_BASE(c, r), 0.9, 'drop'), i * 180);
+    });
+  },
+
+  // Public: called by updateModelLayers
+  swap(c, r, url, buildTime = 0, nbsType = null) {
+    const key  = `${c}_${r}`;
+    const cell = this.cells[key];
+    if (!cell) return;
+
+    // No-op if already showing this URL with no pending build
+    if (cell.displayedUrl === url && !cell.pending) return;
+    // Already building toward this exact URL — don't restart
+    if (cell.pending && cell.pending.url === url) return;
+
+    // Cancel any previous build
+    if (cell.pending) { cell.pending = null; }
+
+    if (buildTime > 0 && cell.mesh) {
+      // Pulse current model for buildTime seconds, then swap to NBS model
+      cell.pending = { url, nbsType, start: Date.now(), duration: buildTime * 1000 };
+      showAdvisor(nbsType);
+    } else {
+      // Instant swap (base models, or first load)
+      this._loadMesh(c, r, url, 0);
+    }
+  },
+
+  // Internal: actually load + display a mesh
+  // animType: 'none' | 'drop' (fall from above) | 'grow' (scale up from ground)
+  _loadMesh(c, r, url, animSecs = 0, animType = 'none') {
+    if (!url) return;
+    const key  = `${c}_${r}`;
+    const cell = this.cells[key];
+    if (!cell) return;
+
+    if (cell.mesh) {
+      const dep = cell.mesh;
+      cell.departing = { mesh: dep, start: Date.now(), initScaleY: dep.scale.y };
+      cell.mesh = null; cell.meshAnim = null;
+      setTimeout(() => {
+        scene.remove(dep);
+        dep.traverse(o => {
+          if (!o.isMesh) return;
+          o.geometry.dispose();
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+        });
+        if (cell.departing?.mesh === dep) cell.departing = null;
+      }, 420);
+    }
+
+    const epoch = ++cell.loadEpoch;
+
+    this.loader.load(url, (gltf) => {
+      // Discard if a newer load has since been dispatched for this cell
+      if (cell.loadEpoch !== epoch) {
+        gltf.scene.traverse(o => {
+          if (!o.isMesh) return;
+          o.geometry.dispose();
+          const mats = Array.isArray(o.material) ? o.material : [o.material];
+          mats.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+        });
+        return;
+      }
+
+      const mesh = gltf.scene;
+      mesh.traverse(child => {
+        if (!child.isMesh) return;
+        child.castShadow = true; child.receiveShadow = true;
+        if (child.material.map) child.material.map.encoding = THREE.sRGBEncoding;
+      });
+
+      mesh.updateMatrixWorld(true);
+      const bbox   = new THREE.Box3().setFromObject(mesh);
+      const center = bbox.getCenter(new THREE.Vector3());
+      const size   = bbox.getSize(new THREE.Vector3());
+
+      const wrapper = new THREE.Group();
+      wrapper.userData.cellKey = key; // drag-and-drop raycasts resolve hits back to a cell
+      wrapper.add(mesh);
+      mesh.position.sub(center);
+      mesh.position.y += size.y / 2;
+
+      const footprint = Math.max(size.x, size.z) || size.y || 1;
+      const scaleXZ   = cell.targetSize / footprint;
+      const DROP_H    = 9;
+
+      if (animType === 'drop') {
+        wrapper.scale.set(scaleXZ, scaleXZ, scaleXZ);
+        wrapper.position.set(cell.x, DROP_H, cell.z);
+        // Hide shadow while falling — reveal on landing to avoid mid-air shadow artifacts
+        mesh.traverse(n => { if (n.isMesh) n.castShadow = false; });
+        cell.meshAnim = { type: 'drop', start: Date.now(), duration: animSecs * 1000, startY: DROP_H };
+      } else if (animType === 'grow') {
+        wrapper.scale.set(scaleXZ, 0.001, scaleXZ);
+        wrapper.position.set(cell.x, 0, cell.z);
+        cell.meshAnim = { type: 'grow', start: Date.now(), duration: animSecs * 1000 };
+      } else {
+        wrapper.scale.set(scaleXZ, scaleXZ, scaleXZ);
+        wrapper.position.set(cell.x, 0, cell.z);
+        cell.meshAnim = null;
+      }
+
+      scene.add(wrapper);
+      cell.mesh         = wrapper;
+      cell.scaleXZ      = scaleXZ;
+      cell.displayedUrl = url;
+    }, undefined, err => console.error('[3D] load failed:', url, err));
+  },
+
+  setHighlight(c, r, sols) { /* PBR — overlay cards handle highlights */ },
+
+  reset() {
+    Object.values(this.cells).forEach(cell => {
+      if (cell.mesh)      { scene.remove(cell.mesh);           cell.mesh      = null; }
+      if (cell.departing) { scene.remove(cell.departing.mesh); cell.departing = null; }
+    });
+    this.cells = {};
+    Object.values(this._liveRings).forEach(r => {
+      scene.remove(r); r.material.dispose(); // geometry is shared — never dispose it here
+    });
+    this._liveRings = {};
+  },
+
+  // Shared ring geometry — created once, reused for every live highlight ring
+  _liveRings: {},
+  _liveRingGeo: (() => {
+    const sz = CELL_SIZE * 0.95;
+    const g = new THREE.RingGeometry(sz * 0.42, sz * 0.54, 48);
+    g.rotateX(-Math.PI / 2);
+    return g;
+  })(),
+
+  setLiveHighlight(c, r, active) {
+    const key  = `${c}_${r}`;
+
+    if (active && !this._liveRings[key]) {
+      const [x, , z] = cellCenter3D(c, r);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xfacc15, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.9,
+        depthWrite: false, depthTest: false
+      });
+      const ring = new THREE.Mesh(this._liveRingGeo, mat);
+      ring.renderOrder = 999;
+      ring.position.set(x, 3, z);
+      ring._born = Date.now();
+      scene.add(ring);
+      this._liveRings[key] = ring;
+    }
+
+    if (!active && this._liveRings[key]) {
+      scene.remove(this._liveRings[key]);
+      this._liveRings[key].material.dispose(); // geometry is shared — not disposed here
+      delete this._liveRings[key];
+    }
+  },
+
+  updateLiveRings() {
+    const t = Date.now();
+    for (const ring of Object.values(this._liveRings)) {
+      ring.material.opacity = 0.5 + 0.45 * Math.abs(Math.sin((t - ring._born) / 400));
+    }
+  },
+
+  update(now) {
+    for (const [key, cell] of Object.entries(this.cells)) {
+
+      // ── Pulsate placed solution, then swap to NBS model after 5s ──
+      if (cell.pending) {
+        const t = Math.min(1, (now - cell.pending.start) / cell.pending.duration);
+
+        // Pulsate XYZ — gentle breathing effect while awaiting swap
+        if (cell.mesh) {
+          const pulse = 1 + 0.07 * Math.sin(now * 0.008);
+          cell.mesh.scale.x = cell.scaleXZ * pulse;
+          cell.mesh.scale.y = cell.scaleXZ * pulse;
+          cell.mesh.scale.z = cell.scaleXZ * pulse;
+        }
+
+        if (t >= 1) {
+          const { url, nbsType } = cell.pending;
+          cell.pending = null;
+          this.setLiveHighlight(cell.c, cell.r, false);
+          this._loadMesh(cell.c, cell.r, url, 0.55, 'grow');
+        }
+      }
+
+      // ── Appear animation: drop from above OR scale up from ground ──
+      if (!cell.pending && cell.mesh && cell.meshAnim) {
+        const t = Math.min(1, (now - cell.meshAnim.start) / cell.meshAnim.duration);
+        if (cell.meshAnim.type === 'drop') {
+          cell.mesh.position.y = cell.meshAnim.startY * (1 - easeOutBack(t));
+          if (t >= 1) {
+            cell.mesh.position.y = 0;
+            cell.mesh.traverse(n => { if (n.isMesh) n.castShadow = true; });
+            cell.meshAnim = null;
+          }
+        } else {
+          cell.mesh.scale.y = Math.max(0.001, easeOutBack(t)) * cell.scaleXZ;
+          if (t >= 1) { cell.mesh.scale.setScalar(cell.scaleXZ); cell.meshAnim = null; }
+        }
+      }
+
+      // ── Departure: squish old model into the ground ──
+      if (cell.departing) {
+        const t = Math.min(1, (now - cell.departing.start) / 380);
+        cell.departing.mesh.scale.y = Math.max(0, cell.departing.initScaleY * (1 - t * t));
+      }
+    }
+  }
+};
+
+function updateModelLayers(state, prevState) {
+  for (const {c, r} of CELLS) {
+    const key    = `${c}_${r}`;
+    const sols   = (state[key] || {}).solutions || [];
+    const sol    = sols[0] || null;
+    const hadSol = !!((prevState[key] || {}).solutions || []).length;
+    const isNew  = sol && !hadSol;
+
+    if (isNew && isAnyBudgetExceeded()) { flashBudgetWarning(); }
+    if (isNew && isDuplicateInPatch(sol, state, key)) { flashDuplicateWarning(sol); }
+
+    const url = sol ? MODEL_NBS(c, r, sol) : MODEL_BASE(c, r);
+    const bt  = sol ? 5 : 0;
+    modelMgr.swap(c, r, url, bt, sol);
+    modelMgr.setHighlight(c, r, sols);
+  }
+}
+
+// ── Flood simulation ──────────────────────────────────────────────
+const FLOOD_MAX_H = 250;  // Three.js units — tall enough to overtop models
+const FLOOD_SECS  = 120;  // seconds to fill fully with 0% mitigation
+
+let floodLevel   = 0;
+let floodDrowned = false;
+let stormStartT  = null;
+let floodLastT   = null;
+let floodRunning = false;
+
+function getAvgMitPct() {
+  let total = 0;
+  for (const {c, r} of CELLS) {
+    const n    = CELL_KEY_TO_BLOCK[`${c}_${r}`];
+    const sols = (lastState[`${c}_${r}`] || {}).solutions || [];
+    let blockMit = 0;
+    for (const sol of sols) {
+      const eff    = NBS_EFFECTIVENESS[sol] || 0;
+      const appPct = (NBS_APPLICATION_PCT[n] || {})[sol] || 0;
+      blockMit += (eff / 10) * appPct;
+    }
+    total += Math.min(100, blockMit);
+  }
+  return total / CELLS.length;
+}
+
+function updateStormTimer() {
+  const el = document.getElementById('stormTimer');
+  if (!el) return;
+  if (!stormStartT) { el.textContent = '2:00'; el.style.color = 'var(--text-dim)'; return; }
+  const remaining = Math.max(0, FLOOD_SECS - (Date.now() - stormStartT) / 1000);
+  const m = Math.floor(remaining / 60);
+  const s = Math.floor(remaining % 60);
+  el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  el.style.color = remaining < 30 ? '#e74c3c' : remaining < 60 ? '#e67e22' : 'var(--text-gold)';
+  if (remaining <= 0 && floodRunning) {
+    floodRunning = false;
+    addLog('🌧 Storm ended.');
+    fadeThrough(() => showEndScreen(getAvgMitPct()));
+    return;
+  }
+
+  // Early win: reaching the target ends the round straight away, once any
+  // solution still building has finished so the player sees it land.
+  // Removing a solution in the meantime (dropping below target) cancels it.
+  const building = Object.values(modelMgr.cells).some(c => c.pending || c.meshAnim);
+  if (floodRunning && getAvgMitPct() >= WIN_PCT && !building) {
+    if (_winReachedAt === null) _winReachedAt = Date.now();
+    if (Date.now() - _winReachedAt >= 700) {
+      floodRunning = false;
+      _winReachedAt = null;
+      fadeThrough(() => showEndScreen(getAvgMitPct(), remaining));
+    }
+  } else {
+    _winReachedAt = null;
+  }
+}
+
+const WIN_PCT = 50;       // average runoff mitigation needed to beat the flood
+let _winReachedAt = null; // when the target was first held with nothing building
+
+function setAllDrowned(drowned) {
+  for (const {c, r} of CELLS)
+    overlayEls[`${c}_${r}`]?.classList.toggle('flooded', drowned);
+}
+
+function resetFlood() {
+  floodRunning = false; stormStartT = null; _winReachedAt = null;
+  floodLevel = 0; floodDrowned = false; _waterReady = false;
+  setAllDrowned(false);
+  _waterPlane.visible = false;
+  updateStormTimer();
+}
+
+function startFlood() {
+  stormStartT = Date.now();
+  floodRunning = true;
+  _waterReady = false;
+  setTimeout(() => { _waterReady = true; }, 2000);
+  addLog('⛈ Storm started — 2:00 remaining');
+}
+
+function restartLevel(levelId) {
+  _gameRenderActive = true;
+  _currentLevel = levelId;
+  _levelWaterBase = (LEVEL_CONFIGS[levelId] || {}).waterBase ?? 1.4;
+  _levelCamX = (LEVEL_CONFIGS[levelId] || {}).camX ?? 0;
+  _levelCamZ = (LEVEL_CONFIGS[levelId] || {}).camZ ?? 0;
+  _levelGridX = (LEVEL_CONFIGS[levelId] || {}).gridX ?? 0;
+  _levelFrustumDefault = (LEVEL_CONFIGS[levelId] || {}).frustum ?? _FRUSTUM;
+  _tgtLX = GRID_CX + _levelCamX; _camLX = _tgtLX;
+  _tgtF  = _levelFrustumDefault;  _camF  = _tgtF;
+  lastState = {};
+  resetBoard();
+  applyLevelConfig(levelId);
+  rebuildOverlays();
+  loadContextModel(levelId);
+  modelMgr.reset();
+  _modelsInited = true;
+  modelMgr.init();
+  setState(GS.GAME);
+}
+
+// Flood physics runs inside _animate() — no separate setInterval needed
+
+// ── Polling ───────────────────────────────────────────────────────
+let lastState = {};
+
+function addLog(msg) {
+  const log = document.getElementById('log');
+  if (!log) return;
+  const p = document.createElement('p');
+  p.textContent = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ' + msg;
+  log.prepend(p);
+  while (log.children.length > 12) log.lastChild.remove();
+}
+
+// ── Local board state (replaces the Flask bridge + ArUco camera) ──
+// Same shape the server used: { "col_row": { solutions: [...], col, row } }
+let boardState = {};
+
+function placeSolution(col, row, nbsType) {
+  const key = `${col}_${row}`;
+  boardState = { ...boardState, [key]: { solutions: [nbsType], col, row } };
+  applyBoardState(boardState);
+}
+
+function removeSolution(col, row) {
+  const key = `${col}_${row}`;
+  if (!boardState[key]) return;
+  const next = { ...boardState };
+  delete next[key];
+  boardState = next;
+  applyBoardState(boardState);
+}
+
+function resetBoard() {
+  boardState = {};
+}
+
+function applyBoardState(state) {
+  const prevState = lastState;
+  lastState = state;
+  updateMetrics(state);
+  updateModelLayers(state, prevState);
+  rebuildSummaryPanel();
+  trayMgr.refresh();
+}
+
+// What a placement would do to the budgets — lets the tray refuse a drop
+// instead of warning after the fact (the physical board could only warn)
+function previewPlacement(col, row, nbsType) {
+  const key = `${col}_${row}`;
+  if (isDuplicateInPatch(nbsType, boardState, key)) return { ok: false, reason: 'duplicate' };
+  const trial = { ...boardState, [key]: { solutions: [nbsType], col, row } };
+  let spent = 0, carbon = 0;
+  for (const {c, r} of CELLS) {
+    const sol = ((trial[`${c}_${r}`] || {}).solutions || [])[0];
+    if (!sol) continue;
+    spent  += SOLUTION_COSTS[sol] || 0;
+    carbon += NBS_DEFS[sol].carbon;
+  }
+  if (_levelBudget - spent < 0)         return { ok: false, reason: 'City Budget' };
+  if (_levelCarbonBudget - carbon < 0)  return { ok: false, reason: 'Carbon Credits' };
+  return { ok: true };
+}
+
+// ══════════════════════════════════════════════════════════════
+// GAME STATE MACHINE
+// States: idle → attract → game → end
+// ══════════════════════════════════════════════════════════════
+const GS = { IDLE: 'idle', GAME: 'game', END: 'end', LEVEL_SELECT: 'level_select', CONTEXT_VIDEO: 'context_video', HOWTO: 'howto' };
+
+const LEVEL_CONTEXT_VIDEOS = {
+  upper_left:  'assets/video/ctx-upper_left.mp4',
+  lower_left:  'assets/video/ctx-lower_left.mp4',
+  lower_right: 'assets/video/ctx-lower_right.mp4',
+  upper_right: 'assets/video/ctx-upper_right.mp4',
+};
+const LEVEL_LABELS = {
+  upper_left:  'The Mountains Block',
+  lower_left:  'The River Block',
+  lower_right: 'The Urban Block',
+  upper_right: 'Mountains and River Block',
+};
+let gameState = GS.IDLE;
+let _currentLevel = null;
+let _levelWaterBase = 1.9;
+let _levelCamX = 0;
+let _levelCamZ = 0;
+let _levelGridX = 0;
+let _levelFrustumDefault = _FRUSTUM;
+
+const _idleEl    = document.getElementById('idle-screen');
+const _endEl     = document.getElementById('end-screen');
+
+// ── Video overlay ─────────────────────────────────────────────
+const _vidOverlay = document.getElementById('vid-overlay');
+const _vidPlayer  = document.getElementById('vid-player');
+
+let _vidLoadedSrc = ''; // tracks which src is already loaded/buffering
+
+function _preloadVid(src) {
+  if (_vidLoadedSrc === src) return;
+  _vidLoadedSrc = src;
+  _vidPlayer.src = src;
+  _vidPlayer.load();
+}
+
+function _playVid(src, { loop = false, onended = null, muted = false } = {}) {
+  _vidPlayer.loop    = loop;
+  _vidPlayer.onended = onended;
+  _vidPlayer.muted   = muted;
+  if (_vidLoadedSrc !== src) {
+    _vidLoadedSrc = src;
+    _vidPlayer.src = src;
+    _vidPlayer.load();
+  } else if (!loop) {
+    _vidPlayer.currentTime = 0;
+  }
+  _vidPlayer.play().catch(() => {
+    _vidPlayer.muted = true;
+    _vidPlayer.play().catch(() => {});
+  });
+}
+
+// ── Context video pool — buffered from page load ───────────────────
+// Each level gets its own <video> element so we buffer all 4 in parallel
+// and play directly from the buffered element (no src-swap, no buffer loss).
+const _ctxVids = {};
+let _activeCtxVid = null;
+
+(function _initCtxVids() {
+  Object.entries(LEVEL_CONTEXT_VIDEOS).forEach(([levelId, url]) => {
+    const el = document.getElementById(`ctxv-${levelId}`);
+    if (!el) return;
+    el.src = url;
+    el.load(); // start buffering immediately at page load
+    _ctxVids[levelId] = el;
+  });
+})();
+
+function _ctxVidPlay(levelId, onended) {
+  const el = _ctxVids[levelId]; if (!el) return;
+  // Hide any previously active context vid
+  if (_activeCtxVid && _activeCtxVid !== el) {
+    _activeCtxVid.pause();
+    _activeCtxVid.style.display = 'none';
+    _activeCtxVid.onended = null;
+  }
+  _vidPlayer.style.display = 'none'; // hide regular player while ctx vid shows
+  el.muted = false;
+  el.currentTime = 0;
+  el.style.display = 'block';
+  el.onended = onended;
+  _activeCtxVid = el;
+  _vidSkip.style.display = 'block';
+  el.play().catch(() => { el.muted = true; el.play().catch(() => {}); });
+}
+
+function _ctxVidHide() {
+  if (!_activeCtxVid) return;
+  _activeCtxVid.pause();
+  _activeCtxVid.style.display = 'none';
+  _activeCtxVid.onended = null;
+  _activeCtxVid = null;
+  _vidPlayer.style.display = ''; // restore regular player
+}
+
+const _landingEl = document.getElementById('landing');
+const _vidSkip   = document.getElementById('vid-skip');
+
+// ── Intro screen: animated water background + start / how-to cards ──
+// (replaces the kiosk's concept loop and the physical-board demo video)
+function showIntro(card) {
+  hideVideo();
+  _landingEl.classList.add('visible');
+  document.getElementById('card-start').style.display = card === 'start' ? 'flex' : 'none';
+  document.getElementById('card-howto').style.display = card === 'howto' ? 'flex' : 'none';
+  waterBg.start();
+}
+
+function hideIntro() {
+  _landingEl.classList.remove('visible');
+  waterBg.stop();
+}
+
+function hideVideo() {
+  _vidPlayer.pause();
+  _ctxVidHide(); // also stop any active context vid element
+  _vidOverlay.style.display = 'none';
+  _vidSkip.style.display = 'none';
+}
+
+// Layered waves with rain and ripples, drawn on a 2D canvas
+const waterBg = (() => {
+  const cvs = document.getElementById('water-bg');
+  const ctx = cvs.getContext('2d');
+  const WAVES = [
+    { amp: 18, len: 520, speed: 0.00035, y: 0.62, color: 'rgba(56,189,248,0.22)' },
+    { amp: 24, len: 380, speed: -0.00045, y: 0.70, color: 'rgba(14,165,233,0.30)' },
+    { amp: 14, len: 260, speed: 0.0006, y: 0.78, color: 'rgba(2,132,199,0.42)' },
+    { amp: 20, len: 640, speed: -0.0003, y: 0.86, color: 'rgba(7,89,133,0.60)' },
+  ];
+  const drops = [], ripples = [];
+  let raf = null, w = 0, h = 0, dpr = 1;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth; h = window.innerHeight;
+    cvs.width = w * dpr; cvs.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drops.length = 0;
+    for (let i = 0; i < Math.round(w / 9); i++) drops.push(newDrop(true));
+  }
+
+  function newDrop(anyY) {
+    return { x: Math.random() * (w + 200), y: anyY ? Math.random() * h : -20 - Math.random() * h * 0.3,
+             v: 0.6 + Math.random() * 0.6, l: 10 + Math.random() * 14 };
+  }
+
+  // Surface height of the top wave at x — drops splash where they meet it
+  function surfaceY(x, t) {
+    const wv = WAVES[0];
+    return h * wv.y + Math.sin(x / wv.len * Math.PI * 2 + t * wv.speed * 6) * wv.amp;
+  }
+
+  function frame(t) {
+    raf = requestAnimationFrame(frame);
+    // Sky: slow rise and fall of the water level so the scene breathes
+    const swell = Math.sin(t * 0.0004) * 14;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#0b1438'); g.addColorStop(0.55, '#123a7a'); g.addColorStop(1, '#0a2a52');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+
+    // Rain
+    ctx.strokeStyle = 'rgba(186,230,253,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const d of drops) {
+      d.y += d.v * 9; d.x -= d.v * 1.6;
+      ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + d.l * 0.18, d.y - d.l);
+      if (d.y > surfaceY(d.x, t) + swell) {
+        if (Math.random() < 0.25) ripples.push({ x: d.x, y: d.y, r: 1, a: 0.5 });
+        Object.assign(d, newDrop(false));
+      }
+    }
+    ctx.stroke();
+
+    // Waves, back to front
+    for (const wv of WAVES) {
+      ctx.fillStyle = wv.color;
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      for (let x = 0; x <= w + 20; x += 20) {
+        const y = h * wv.y + swell
+          + Math.sin(x / wv.len * Math.PI * 2 + t * wv.speed * 6) * wv.amp
+          + Math.sin(x / (wv.len * 0.37) + t * wv.speed * 9) * wv.amp * 0.35;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(w, h); ctx.closePath(); ctx.fill();
+    }
+
+    // Ripples where drops hit the surface
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const rp = ripples[i];
+      rp.r += 0.6; rp.a -= 0.012;
+      if (rp.a <= 0) { ripples.splice(i, 1); continue; }
+      ctx.strokeStyle = `rgba(224,242,254,${rp.a})`;
+      ctx.beginPath(); ctx.ellipse(rp.x, rp.y, rp.r * 2.2, rp.r * 0.6, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+
+  window.addEventListener('resize', () => { if (raf) resize(); });
+
+  return {
+    start() { if (raf) return; resize(); raf = requestAnimationFrame(frame); },
+    stop()  { if (raf) cancelAnimationFrame(raf); raf = null; },
+  };
+})();
+
+function _launchGameFromContextVideo() {
+  if (_activeCtxVid) _activeCtxVid.onended = null;
+  fadeThrough(() => {
+    hideVideo();
+    setState(GS.GAME);
+    modelMgr.init(); // blocks drop in as game fades in
+  }, 500, 300, 700);
+}
+
+function _showHowTo() {
+  gameState = GS.HOWTO;
+  showIntro('howto');
+}
+
+function _launchLevelSelectFromHowTo() {
+  fadeThrough(() => { hideIntro(); setState(GS.LEVEL_SELECT); }, 400, 120, 600);
+}
+
+const _panelEl        = document.getElementById('panel');
+const _metricsPanelEl = document.getElementById('metrics-panel');
+const _trayEl         = document.getElementById('tray');
+let _modelsInited = false;
+
+// ── Fade-to-black transition utility ─────────────────────────────
+const _fadeEl = document.getElementById('black-fade');
+let _fadeBusy = false;
+let _fadeT1 = null, _fadeT2 = null, _fadeT3 = null;
+
+function _clearFade() {
+  clearTimeout(_fadeT1); clearTimeout(_fadeT2); clearTimeout(_fadeT3);
+  _fadeT1 = _fadeT2 = _fadeT3 = null;
+}
+
+function fadeThrough(cb, inMs = 320, holdMs = 40, outMs = 420) {
+  _clearFade(); // cancel any in-flight fade (prevents stale callbacks firing)
+  _fadeBusy = true;
+  _fadeEl.style.transition = `opacity ${inMs}ms ease`;
+  _fadeEl.style.opacity = '1';
+  _fadeEl.style.pointerEvents = 'all';
+  _fadeT1 = setTimeout(() => {
+    cb();
+    _fadeT2 = setTimeout(() => {
+      _fadeEl.style.transition = `opacity ${outMs}ms ease`;
+      _fadeEl.style.opacity = '0';
+      _fadeT3 = setTimeout(() => {
+        _fadeEl.style.pointerEvents = 'none';
+        _fadeBusy = false;
+      }, outMs);
+    }, holdMs);
+  }, inMs);
+}
+
+function setState(s) {
+  const prev = gameState;
+  gameState = s;
+
+  _endEl.classList.toggle('visible',     s === GS.END);
+  _panelEl.style.display        = (s === GS.GAME) ? 'flex' : 'none';
+  _metricsPanelEl.style.display = (s === GS.GAME) ? 'flex' : 'none';
+  _trayEl.classList.toggle('visible', s === GS.GAME);
+  if (s !== GS.GAME) trayMgr.cancelDrag();
+  if (s === GS.GAME) {
+    document.getElementById('panel-level-name').textContent = LEVEL_LABELS[_currentLevel] || '';
+    trayMgr.refresh();
+  }
+
+  if (s === GS.IDLE) {
+    showIntro('start');
+  } else if (s === GS.LEVEL_SELECT) {
+    hideVideo();
+  }
+
+  if (s === GS.GAME) {
+    if (!floodRunning) { startFlood(); } // also covers Restart from inside a game
+  }
+  if (s === GS.LEVEL_SELECT) {
+    _gameRenderActive = false; // pause main renderer while level-select renderer runs
+    levelSelectMgr.init(levelId => {
+      fadeThrough(() => {
+        // Set up level (loads in background while context video plays)
+        _gameRenderActive = true;
+        _currentLevel = levelId;
+        _levelWaterBase = (LEVEL_CONFIGS[levelId] || {}).waterBase ?? 1.4;
+        _levelCamX = (LEVEL_CONFIGS[levelId] || {}).camX ?? 0;
+        _levelCamZ = (LEVEL_CONFIGS[levelId] || {}).camZ ?? 0;
+        _levelGridX = (LEVEL_CONFIGS[levelId] || {}).gridX ?? 0;
+        _levelFrustumDefault = (LEVEL_CONFIGS[levelId] || {}).frustum ?? _FRUSTUM;
+        _tgtLX = GRID_CX + _levelCamX; _camLX = _tgtLX;
+        _tgtF  = _levelFrustumDefault;  _camF  = _tgtF;
+        lastState = {};
+        resetBoard();
+        applyLevelConfig(levelId);
+        rebuildOverlays();
+        loadContextModel(levelId);
+        modelMgr.reset();
+        _modelsInited = true;
+
+        // Play context video, then start game when it ends
+        const ctxUrl = LEVEL_CONTEXT_VIDEOS[levelId];
+        if (ctxUrl) {
+          // Preload GLBs after video has had 3s to buffer — avoids competing for server connections
+          setTimeout(() => {
+            const _glbPreloader = new THREE.GLTFLoader();
+            CELLS.forEach(({c, r}) => _glbPreloader.load(MODEL_BASE(c, r), () => {}));
+          }, 3000);
+
+          gameState = GS.CONTEXT_VIDEO;
+          _vidOverlay.style.display = 'block';
+          _ctxVidPlay(levelId, _launchGameFromContextVideo); // play from pre-buffered element
+        } else {
+          modelMgr.init();
+          setState(GS.GAME);
+        }
+      });
+    });
+  } else {
+    _gameRenderActive = true;
+    if (levelSelectMgr) levelSelectMgr.dispose();
+    const _lvlEl = document.getElementById('lvl-overlay');
+    if (_lvlEl) _lvlEl.style.display = 'none';
+  }
+}
+
+// ── Idle video loop ───────────────────────────────────────────
+const _idleVids = Array.from(document.querySelectorAll('.idle-vid'));
+let _idleIdx = 0, _idleCurrent = null;
+
+function startIdleVideos() {
+  _idleVids.forEach(v => v.classList.remove('active'));
+  _idleIdx = 0;
+  playIdleVideo(0);
+}
+
+function playIdleVideo(idx) {
+  const vid = _idleVids[idx];
+  if (!vid || !vid.src) return; // no video set yet
+  _idleVids.forEach(v => { v.classList.remove('active'); v.pause(); });
+  vid.currentTime = 0;
+  vid.classList.add('active');
+  vid.play().catch(() => {});
+  vid.onended = () => {
+    const next = (_idleIdx + 1) % _idleVids.filter(v => v.src).length;
+    _idleIdx = next;
+    playIdleVideo(next);
+  };
+}
+
+// ── End screen + navigation buttons ───────────────────────────
+// (the kiosk's 12 s auto-return countdown is dropped — online players choose)
+function goHome() {
+  fadeThrough(() => { goIdle(); showIntro('start'); });
+}
+
+function goLevelSelect() {
+  fadeThrough(() => { resetFlood(); dismissAdvisor(); setState(GS.LEVEL_SELECT); });
+}
+
+function retryLevel() {
+  fadeThrough(() => { resetFlood(); dismissAdvisor(); restartLevel(_currentLevel); });
+}
+
+document.getElementById('btn-try-again').addEventListener('click', retryLevel);
+document.getElementById('btn-other-level').addEventListener('click', goLevelSelect);
+document.getElementById('btn-home').addEventListener('click', goHome);
+document.getElementById('btn-restart').addEventListener('click', retryLevel);
+document.getElementById('btn-exit').addEventListener('click', goHome);
+document.getElementById('btn-play').addEventListener('click', _showHowTo);
+document.getElementById('btn-choose-block').addEventListener('click', _launchLevelSelectFromHowTo);
+_vidSkip.addEventListener('click', () => advance());
+
+function showEndScreen(pct, secsLeft = 0) {
+  // Win = at least WIN_PCT of runoff mitigated by placed solutions
+  const win = pct >= WIN_PCT;
+  const titleEl = document.getElementById('end-title');
+  const statsEl = document.getElementById('end-stats');
+  titleEl.textContent = win ? 'FLOOD DEFEATED!' : 'THE FLOOD WINS';
+  titleEl.className   = 'end-title ' + (win ? 'win' : 'loss');
+  const spare = secsLeft >= 1
+    ? ` with ${Math.floor(secsLeft / 60)}:${Math.floor(secsLeft % 60).toString().padStart(2, '0')} to spare`
+    : '';
+  statsEl.textContent = `You mitigated ${Math.floor(pct)}% of the storm${spare}`;
+  setState(GS.END);
+}
+
+// ── Advisor character ─────────────────────────────────────────────
+const ADV_ICONS = {
+  greenroof:         '👩‍🌾',
+  permeablepavement: '👷',
+  engineeredsoil:    '👨‍🔬',
+  urbanfarming:      '🧑‍🍳',
+  greenfacades:      '👩‍🎨',
+  undergroundtanks:  '👷‍♂️',
+  sewersystem:       '🔧',
+};
+
+const ADV_NAMES = {
+  greenroof:         'Elena\nEcologist',
+  permeablepavement: 'Carlos\nEngineer',
+  engineeredsoil:    'Dr. Marta\nSoil Sci.',
+  urbanfarming:      'Pau\nAgronom.',
+  greenfacades:      'Rosa\nBotanist',
+  undergroundtanks:  'Marc\nCivil Eng.',
+  sewersystem:       'Julia\nHydraulics',
+};
+
+const ADV_TEXT = {
+  greenroof:         'Vegetated roof layers absorb rain before it hits the drain — reducing peak runoff by up to 70% in heavy storms.',
+  permeablepavement: 'Porous asphalt lets water seep into the substrate instead of racing down the gutter. No puddles, less noise.',
+  engineeredsoil:    'High-porosity structural soil stores storm water underground and releases it slowly — nature\'s own sponge.',
+  urbanfarming:      'Raised beds and planters intercept rain while feeding the neighbourhood — two missions, one rooftop.',
+  greenfacades:      'Climbing plants on vertical surfaces cool the building, cut noise, and soak up a surprising amount of rainfall.',
+  undergroundtanks:  'Reinforced concrete tanks buried beneath plazas capture millions of litres before it overwhelms the drains — Barcelona\'s most powerful flood buffer.',
+  sewersystem:       'Wider, separated storm sewers channel peak flow away from streets fast. Expensive and carbon-heavy, but essential when nature alone isn\'t enough.',
+};
+
+let _advTimer = null;
+
+function showAdvisor(sol) {
+  const def  = NBS_DEFS[sol]; if (!def) return;
+  const icon = ADV_ICONS[sol] || '👷';
+  const name = ADV_NAMES[sol] || 'Advisor';
+  const text = ADV_TEXT[sol]  || 'Deploying nature-based solution…';
+
+  document.getElementById('adv-face').textContent      = icon;
+  document.getElementById('adv-char-name').textContent = name;
+  document.getElementById('adv-name').textContent      = def.label;
+
+  const tagEl = document.getElementById('adv-tag');
+  tagEl.textContent = def.cat;
+  tagEl.style.color       = def.color;
+  tagEl.style.borderColor = def.color + '66';
+  tagEl.style.background  = def.color + '1a';
+
+  document.getElementById('adv-text').textContent = text;
+
+  document.getElementById('adv-stats').innerHTML = [
+    `💧 ${def.capLabel}/m²`,
+    def.noise ? `🔇 −${def.noise} dB noise` : null,
+    def.embodied ? `⚠ +${def.carbon} tCO₂ build` : `🌿 −${def.carbon} tCO₂/yr`,
+    `⏱ ${def.buildTime}s build`,
+  ].filter(Boolean).map(s => `<span class="adv-stat">${s}</span>`).join('');
+
+  const el = document.getElementById('advisor');
+  el.classList.remove('adv-out');
+  el.classList.add('adv-in');
+
+  clearTimeout(_advTimer);
+  _advTimer = setTimeout(dismissAdvisor, 7000);
+}
+
+function dismissAdvisor() {
+  clearTimeout(_advTimer);
+  const el = document.getElementById('advisor');
+  el.classList.remove('adv-in');
+  el.classList.add('adv-out');
+}
+
+// Show website video immediately — deferred so the overlay div is in the DOM
+
+// ── Level Select (shown after demo video, before game starts) ─────────
+// var (not const) so setState can safely reference it before this line executes
+var levelSelectMgr = (() => {
+  // Counter-clockwise: upper_left → lower_left → lower_right → upper_right
+  // ox/oz: target offset as fraction of full model width/depth
+  // Screen UP = (-X,-Z), Screen DOWN = (+X,+Z), Screen LEFT = (-X,+Z), Screen RIGHT = (+X,-Z)
+  const PATCHES = [
+    { id: 'upper_left',  label: 'The Mountains Block',      uvx: 0.30, uvz: 0.28, ox:  0.06, oz:  0.01 },
+    { id: 'lower_left',  label: 'The River Block',           uvx: 0.20, uvz: 0.72, ox:  0.01, oz:  0.03 },
+    { id: 'lower_right', label: 'The Urban Block',           uvx: 0.72, uvz: 0.62, ox:  0.00, oz: -0.15 },
+    { id: 'upper_right', label: 'Mountains and River Block', uvx: 0.80, uvz: 0.22, ox: -0.03, oz: -0.03, zoom: 1.2 },
+  ];
+  const DWELL_MS = 4000, TRANSITION_MS = 1400, OVERVIEW_MS = 2000;
+
+  // True isometric: arctan(1/√2) ≈ 35.26° elevation, 45° azimuth — matches game camera
+  const ELEV = Math.atan(1 / Math.SQRT2), AZIM = Math.PI / 4;
+  const ISO_DIR = new THREE.Vector3(
+    Math.cos(ELEV) * Math.sin(AZIM),
+    Math.sin(ELEV),
+    Math.cos(ELEV) * Math.cos(AZIM)
+  ).normalize();
+  const ISO_UP = new THREE.Vector3(0, 1, 0);
+
+  // Plan view: straight down, north (-Z) up on screen
+  const TOP_DIR = new THREE.Vector3(0, 1, 0);
+  const TOP_UP  = new THREE.Vector3(0, 0, -1);
+
+  let _renderer = null, _scene = null, _camera = null, _animId = null;
+  let _model = null, _bbox = new THREE.Box3();
+  let _patchIdx = -1, _phase = 'loading', _phaseStart = 0;
+  let _onSelect = null;
+
+  // Animated ortho state — target position, frustum size, camera direction + up
+  const _tgt  = new THREE.Vector3(), _tgtA  = new THREE.Vector3(), _tgtB  = new THREE.Vector3();
+  const _cDir = new THREE.Vector3(), _cDirA = new THREE.Vector3(), _cDirB = new THREE.Vector3();
+  const _cUp  = new THREE.Vector3(), _cUpA  = new THREE.Vector3(), _cUpB  = new THREE.Vector3();
+  let _oSize = 1, _oSizeA = 1, _oSizeB = 1;
+
+  function _ease(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+
+  function _applyOrtho(size, target) {
+    const aspect = window.innerWidth / window.innerHeight;
+    _camera.left   = -size * aspect;
+    _camera.right  =  size * aspect;
+    _camera.top    =  size;
+    _camera.bottom = -size;
+    _camera.updateProjectionMatrix();
+    const farDist = Math.max(
+      _bbox.max.x - _bbox.min.x,
+      _bbox.max.y - _bbox.min.y,
+      _bbox.max.z - _bbox.min.z
+    ) * 4 || 10000;
+    _camera.position.copy(target).addScaledVector(_cDir, farDist);
+    _camera.up.copy(_cUp);
+    _camera.lookAt(target);
+  }
+
+  function _patchBbox(uvx, uvz) {
+    const fw = _bbox.max.x - _bbox.min.x, fh = _bbox.max.z - _bbox.min.z;
+    const cx = _bbox.min.x + uvx * fw, cz = _bbox.min.z + uvz * fh;
+    const hw = fw * 0.14, hh = fh * 0.14;
+    return new THREE.Box3(
+      new THREE.Vector3(cx - hw, _bbox.min.y, cz - hh),
+      new THREE.Vector3(cx + hw, _bbox.max.y, cz + hh)
+    );
+  }
+
+  function _startTransition(toTarget, toSize, toDir, toUp) {
+    _tgtA.copy(_tgt);   _tgtB.copy(toTarget);
+    _cDirA.copy(_cDir); _cDirB.copy(toDir);
+    _cUpA.copy(_cUp);   _cUpB.copy(toUp);
+    _oSizeA = _oSize;   _oSizeB = toSize;
+    _phase = 'transition'; _phaseStart = Date.now();
+  }
+
+  function _goToPatch(idx) {
+    _patchIdx = idx;
+    const p = PATCHES[idx];
+    const pb = _patchBbox(p.uvx, p.uvz);
+    const tc = new THREE.Vector3(); pb.getCenter(tc);
+    const fw = _bbox.max.x - _bbox.min.x, fd = _bbox.max.z - _bbox.min.z;
+    tc.x += (p.ox || 0) * fw;
+    tc.z += (p.oz || 0) * fd;
+    const s = new THREE.Vector3(); pb.getSize(s);
+    const patchSize = Math.max(s.x, s.z) * 0.38 * (p.zoom || 1);
+    document.getElementById('lvl-name').textContent = p.label;
+    document.getElementById('lvl-hint').textContent = `Block ${idx + 1} of ${PATCHES.length}`;
+    document.getElementById('lvl-bar').style.width = '0%';
+    _startTransition(tc, patchSize, ISO_DIR, ISO_UP);
+  }
+
+  function _tick() {
+    _animId = requestAnimationFrame(_tick);
+    const now = Date.now();
+    if (_phase === 'overview') {
+      if (now - _phaseStart >= OVERVIEW_MS) _goToPatch(0);
+    } else if (_phase === 'transition') {
+      const e = _ease(Math.min((now - _phaseStart) / TRANSITION_MS, 1));
+      _tgt.lerpVectors(_tgtA, _tgtB, e);
+      _oSize = _oSizeA + (_oSizeB - _oSizeA) * e;
+      _cDir.lerpVectors(_cDirA, _cDirB, e).normalize();
+      _cUp.lerpVectors(_cUpA, _cUpB, e).normalize();
+      _applyOrtho(_oSize, _tgt);
+      if (e >= 1) { _phase = 'dwell'; _phaseStart = now; }
+    } else if (_phase === 'dwell') {
+      const elapsed = now - _phaseStart;
+      document.getElementById('lvl-bar').style.width = Math.min(elapsed / DWELL_MS, 1) * 100 + '%';
+      if (elapsed >= DWELL_MS) _goToPatch((_patchIdx + 1) % PATCHES.length);
+    }
+    if (_renderer && _scene && _camera) _renderer.render(_scene, _camera);
+  }
+
+  function init(onSelect) {
+    _onSelect = onSelect;
+    if (_renderer) return;
+    _patchIdx = -1; _phase = 'loading';
+
+    const canvas = document.getElementById('lvl-canvas');
+    _renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    _renderer.setPixelRatio(window.devicePixelRatio);
+    _renderer.setSize(window.innerWidth, window.innerHeight);
+    _renderer.outputEncoding = THREE.sRGBEncoding;
+    _renderer.shadowMap.enabled = true;
+    _renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    _renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    _renderer.toneMappingExposure = 0.60;
+
+    _scene = new THREE.Scene();
+    _scene.background = new THREE.Color(0x0a1628);
+    _camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100000);
+    _scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+    const dir = new THREE.DirectionalLight(0xfff0d0, 0.90);
+    dir.position.copy(ISO_DIR);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.bias = -0.001;
+    _scene.add(dir);
+    const _lvlFill = new THREE.DirectionalLight(0x8898ff, 0.18);
+    _lvlFill.position.set(-10, 8, 10); _scene.add(_lvlFill);
+
+    document.getElementById('lvl-overlay').style.display = 'block';
+    document.getElementById('lvl-name').textContent = 'Loading…';
+    document.getElementById('lvl-hint').textContent = '';
+    document.getElementById('lvl-bar').style.width = '0%';
+
+    new THREE.GLTFLoader().load('assets/models/full_model.glb', gltf => {
+      _model = gltf.scene;
+      _model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      _scene.add(_model);
+      _bbox.setFromObject(_model);
+
+      const center = new THREE.Vector3(); _bbox.getCenter(center);
+      const size   = new THREE.Vector3(); _bbox.getSize(size);
+      _oSize = Math.max(size.x, size.z) * 0.38;
+      _tgt.copy(center);
+      _cDir.copy(TOP_DIR);
+      _cUp.copy(TOP_UP);
+      _applyOrtho(_oSize, center);
+
+      document.getElementById('lvl-name').textContent = '';
+      _phase = 'overview'; _phaseStart = Date.now();
+      _tick();
+    }, undefined, err => {
+      console.error('[lvl] load failed', err);
+      document.getElementById('lvl-name').textContent = 'Couldn’t load the 3D city';
+      document.getElementById('lvl-hint').textContent = location.protocol === 'file:'
+        ? 'Open the game through start.bat (a local server), not by double-clicking index.html'
+        : 'Check that assets/models/full_model.glb was uploaded';
+    });
+  }
+
+  function dispose() {
+    if (_animId) { cancelAnimationFrame(_animId); _animId = null; }
+    if (_model) {
+      _model.traverse(o => {
+        if (!o.isMesh) return;
+        o.geometry.dispose();
+        (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); });
+      });
+      _model = null;
+    }
+    if (_renderer) { _renderer.dispose(); _renderer = null; }
+    _scene = null; _camera = null;
+  }
+
+  // Manual browsing (arrow buttons / keys) — the auto-tour carries on from there
+  function step(d) {
+    if (_phase === 'loading' || _phase === 'selected') return;
+    const from = _patchIdx >= 0 ? _patchIdx : -1;
+    _goToPatch((from + d + PATCHES.length) % PATCHES.length);
+  }
+
+  window.addEventListener('resize', () => {
+    if (!_renderer) return;
+    _renderer.setSize(window.innerWidth, window.innerHeight);
+    _applyOrtho(_oSize, _tgt);
+  });
+
+  function selectCurrent() {
+    if (_phase === 'loading' || _phase === 'selected') return;
+    _phase = 'selected'; // ignore repeat clicks while fading out
+    const idx = _patchIdx >= 0 ? _patchIdx : 0;
+    const id = PATCHES[idx].id;
+    // Context videos are pre-buffered from page load — no preload needed here
+    if (_animId) { cancelAnimationFrame(_animId); _animId = null; }
+    if (_onSelect) _onSelect(id);
+    // Wait until the black fade is fully opaque (320ms) before hiding the level-select
+    // canvas — hiding it earlier reveals the stale game scene behind the semi-transparent fade
+    setTimeout(() => {
+      dispose();
+      document.getElementById('lvl-overlay').style.display = 'none';
+    }, 340);
+  }
+
+  return { init, dispose, selectCurrent, step };
+})();
+
+document.getElementById('lvl-prev').addEventListener('click', () => levelSelectMgr.step(-1));
+document.getElementById('lvl-next').addEventListener('click', () => levelSelectMgr.step(1));
+document.getElementById('lvl-select').addEventListener('click', () => levelSelectMgr.selectCurrent());
+
+// ══════════════════════════════════════════════════════════════
+// SOLUTION TRAY — drag-and-drop replacement for the ArUco tokens
+// One card per physical token (IDs 100–110). Drag onto a block to place;
+// a card already on the board moves when dropped elsewhere, and is removed
+// when dropped back on the tray.
+// ══════════════════════════════════════════════════════════════
+const TRAY_ORDER = [
+  'greenroof', 'greenfacades', 'urbanfarming', 'permeablepavement', 'engineeredsoil',
+  'terracing', 'riparian', 'wetlands', 'leakingdam', 'sewersystem', 'undergroundtanks',
+];
+
+var trayMgr = (() => {
+  const cardsEl  = document.getElementById('tray-cards');
+  const hintEl   = document.getElementById('tray-hint');
+  const ghostEl  = document.getElementById('drag-ghost');
+  const ray      = new THREE.Raycaster();
+  const ndc      = new THREE.Vector2();
+  const ground   = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const groundHit = new THREE.Vector3();
+
+  let drag = null; // { sol, cardEl, fromKey, overKey, overTray, check }
+
+  // Which cell currently holds this solution type (each token exists once)
+  function cellOf(sol) {
+    for (const [key, cell] of Object.entries(boardState)) {
+      if ((cell.solutions || [])[0] === sol) return key;
+    }
+    return null;
+  }
+
+  function build() {
+    cardsEl.innerHTML = '';
+    for (const sol of TRAY_ORDER) {
+      const def = NBS_DEFS[sol];
+      const card = document.createElement('div');
+      card.className = 'tray-card';
+      card.dataset.sol = sol;
+      card.innerHTML = `
+        <div class="tray-swatch" style="background:${def.color}"></div>
+        <div class="tray-cat">${def.cat}<span class="tray-bio" style="color:${NBS_BIO[sol] >= 0 ? '#16a34a' : '#dc2626'}">🌿 ${NBS_BIO[sol] > 0 ? '+' : ''}${NBS_BIO[sol]}</span></div>
+        <div class="tray-name">${def.label}</div>
+        <div class="tray-meta"><span>💰 ${SOLUTION_COSTS[sol]}</span><span>${def.carbon > 0 ? '+' : ''}${def.carbon} t</span></div>
+        <div class="tray-placed-tag"></div>
+        <button class="tray-remove" title="Remove from board" style="display:none">✕</button>`;
+      card.addEventListener('pointerdown', e => onDown(e, sol, card));
+      card.querySelector('.tray-remove').addEventListener('pointerdown', e => e.stopPropagation());
+      card.querySelector('.tray-remove').addEventListener('click', () => {
+        const key = cellOf(sol);
+        if (key) { const [c, r] = key.split('_').map(Number); removeSolution(c, r); }
+      });
+      cardsEl.appendChild(card);
+    }
+  }
+
+  // Re-sync cards with the board: placed tags + affordability
+  function refresh() {
+    for (const card of cardsEl.children) {
+      const sol = card.dataset.sol;
+      const key = cellOf(sol);
+      const tag = card.querySelector('.tray-placed-tag');
+      card.classList.toggle('placed', !!key);
+      tag.textContent   = key ? `✓ On block ${CELL_KEY_TO_BLOCK[key]}` : '';
+      card.querySelector('.tray-remove').style.display = key ? 'flex' : 'none';
+      // Dim cards that can't fit the remaining budget anywhere (placed ones can still move)
+      const cost = SOLUTION_COSTS[sol] || 0;
+      card.classList.toggle('unaffordable', !key && (cost > _budgetCash || NBS_DEFS[sol].carbon > _budgetCarbon));
+    }
+  }
+
+  // Raycast the pointer onto block meshes, then fall back to the ground plane
+  function cellAt(x, y) {
+    ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    const meshes = Object.values(modelMgr.cells).map(cell => cell.mesh).filter(Boolean);
+    const hits = ray.intersectObjects(meshes, true);
+    for (const hit of hits) {
+      for (let o = hit.object; o; o = o.parent) {
+        if (o.userData.cellKey) return o.userData.cellKey;
+      }
+    }
+    if (ray.ray.intersectPlane(ground, groundHit)) {
+      const c = Math.floor((groundHit.x - _levelGridX) / CELL_SIZE);
+      const r = Math.floor(groundHit.z / CELL_SIZE);
+      const key = `${c}_${r}`;
+      if (CELL_KEY_TO_BLOCK[key]) return key;
+    }
+    return null;
+  }
+
+  // What dropping `sol` on `key` would do (moving a placed card frees its old cell first)
+  function evaluate(sol, key) {
+    const [c, r] = key.split('_').map(Number);
+    const n      = CELL_KEY_TO_BLOCK[key];
+    const appPct = (NBS_APPLICATION_PCT[n] || {})[sol] || 0;
+    const mit    = Math.min(100, Math.round((NBS_EFFECTIVENESS[sol] || 0) / 10 * appPct)); // same cap as getAvgMitPct
+    const saved  = boardState;
+    if (drag.fromKey) { boardState = { ...boardState }; delete boardState[drag.fromKey]; }
+    const res = previewPlacement(c, r, sol);
+    boardState = saved;
+    if (!res.ok) return { ok: false, n, text: `Not enough ${res.reason}` };
+    if (appPct === 0) return { ok: true, n, weak: true, text: `Block ${n} · no effect here (0% applicable)` };
+    const bio = NBS_BIO[sol] || 0;
+    return { ok: true, n, text: `Block ${n} · ${appPct}% coverage → ${mit}% mitigation · biodiversity ${bio > 0 ? '+' : ''}${bio}` };
+  }
+
+  function setHover(key, check) {
+    if (drag.overKey && drag.overKey !== key) {
+      const [pc, pr] = drag.overKey.split('_').map(Number);
+      modelMgr.setLiveHighlight(pc, pr, false);
+    }
+    drag.overKey = key;
+    if (!key) return;
+    const [c, r] = key.split('_').map(Number);
+    modelMgr.setLiveHighlight(c, r, true);
+    const ring = modelMgr._liveRings[key];
+    if (ring) ring.material.color.set(!check.ok ? 0xf87171 : check.weak ? 0xfb923c : 0x4ade80);
+  }
+
+  function onDown(e, sol, card) {
+    if (gameState !== GS.GAME || e.button > 0) return;
+    e.preventDefault();
+    const def = NBS_DEFS[sol];
+    drag = { sol, cardEl: card, fromKey: cellOf(sol), overKey: null, overTray: false, check: null };
+    card.classList.add('dragging');
+    ghostEl.style.borderLeftColor = def.color;
+    ghostEl.innerHTML = `${def.label}<span class="ghost-tip">Drop on a block</span>`;
+    ghostEl.style.display = 'block';
+    moveGhost(e.clientX, e.clientY);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', cancelDrag);
+  }
+
+  function moveGhost(x, y) {
+    ghostEl.style.transform = `translate(${x + 14}px, ${y - 46}px)`;
+  }
+
+  function onMove(e) {
+    if (!drag) return;
+    moveGhost(e.clientX, e.clientY);
+    const tipEl = ghostEl.querySelector('.ghost-tip');
+    const trayRect = _trayEl.getBoundingClientRect();
+    drag.overTray = e.clientY >= trayRect.top && e.clientX >= trayRect.left && e.clientX <= trayRect.right;
+    _trayEl.classList.toggle('drop-remove', drag.overTray && !!drag.fromKey);
+
+    const key = drag.overTray ? null : cellAt(e.clientX, e.clientY);
+    const check = key ? evaluate(drag.sol, key) : null;
+    drag.check = check;
+    setHover(key, check);
+
+    if (drag.overTray) {
+      tipEl.className = 'ghost-tip' + (drag.fromKey ? ' bad' : '');
+      tipEl.textContent = drag.fromKey ? 'Release to remove from the board' : 'Drop on a block';
+    } else if (check) {
+      tipEl.className = 'ghost-tip ' + (check.ok && !check.weak ? 'good' : 'bad');
+      tipEl.textContent = check.text;
+    } else {
+      tipEl.className = 'ghost-tip';
+      tipEl.textContent = 'Drop on a block';
+    }
+  }
+
+  function onUp() {
+    if (!drag) return;
+    const { sol, fromKey, overKey, overTray, check } = drag;
+    cancelDrag();
+    if (overTray && fromKey) {
+      const [c, r] = fromKey.split('_').map(Number);
+      removeSolution(c, r);
+      return;
+    }
+    if (!overKey || overKey === fromKey) return;
+    if (!check.ok) { _flashWarning(`${NBS_DEFS[sol].label}: ${check.text.toLowerCase()} — remove or replace a solution`); return; }
+    if (fromKey) {
+      // Move: free the old cell without triggering a model swap for it twice
+      const next = { ...boardState };
+      delete next[fromKey];
+      boardState = next;
+    }
+    const [c, r] = overKey.split('_').map(Number);
+    placeSolution(c, r, sol);
+  }
+
+  function cancelDrag() {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', cancelDrag);
+    if (!drag) return;
+    if (drag.overKey) {
+      const [c, r] = drag.overKey.split('_').map(Number);
+      modelMgr.setLiveHighlight(c, r, false);
+    }
+    drag.cardEl.classList.remove('dragging');
+    _trayEl.classList.remove('drop-remove');
+    ghostEl.style.display = 'none';
+    drag = null;
+  }
+
+  build();
+  return { refresh, cancelDrag };
+})();
+
+// ── Boot (all definitions are above this point) ───────────────────
+createOverlays();
+_animate();
+setState(GS.IDLE);
+// GLB loading is blocked on file:// — say so instead of hanging on "Loading…"
+if (location.protocol === 'file:') document.getElementById('file-warning').classList.add('visible');
+
+
+// ── Keyboard handler (programmable keyboard: A / B / C) ───────────
+
+// Fully reset to idle state, cancelling any active game/video/level-select
+function goIdle() {
+  resetFlood();
+  dismissAdvisor();
+  trayMgr.cancelDrag();
+  _vidPlayer.onended = null;
+  _panelEl.style.display        = 'none';
+  _metricsPanelEl.style.display = 'none';
+  _trayEl.classList.remove('visible');
+  document.getElementById('summary-panel').classList.remove('has-solutions');
+  _endEl.classList.remove('visible');
+  _gameRenderActive = true;
+  if (levelSelectMgr) levelSelectMgr.dispose();
+  const lvlEl = document.getElementById('lvl-overlay');
+  if (lvlEl) lvlEl.style.display = 'none';
+  gameState = GS.IDLE;
+}
+
+// "Next step" — what the kiosk's C key did; now also the Skip button
+function advance() {
+  if (gameState === GS.LEVEL_SELECT) {
+    levelSelectMgr.selectCurrent();
+  } else if (gameState === GS.CONTEXT_VIDEO) {
+    _launchGameFromContextVideo();
+  } else if (gameState === GS.HOWTO) {
+    _launchLevelSelectFromHowTo();
+  } else if (gameState === GS.END) {
+    retryLevel();
+  } else if (gameState === GS.IDLE) {
+    _showHowTo();
+  }
+}
+
+// Keyboard shortcuts kept from the kiosk: Space/Enter/C = next, Esc = home
+document.addEventListener('keydown', e => {
+  const key = e.key.toLowerCase();
+  if (gameState === GS.LEVEL_SELECT && (key === 'arrowleft' || key === 'arrowright')) {
+    levelSelectMgr.step(key === 'arrowleft' ? -1 : 1);
+  } else if (key === 'c' || key === 'enter' || (key === ' ' && gameState !== GS.GAME)) {
+    if (e.target.tagName === 'BUTTON') return; // let focused buttons handle their own click
+    e.preventDefault();
+    advance();
+  } else if (key === 'escape') {
+    if (gameState === GS.GAME) trayMgr.cancelDrag();
+    else if (gameState !== GS.IDLE) goHome();
+  }
+});
+</script>
+
+
+
+</body>
+</html>
