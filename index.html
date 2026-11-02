@@ -1044,27 +1044,23 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   #lvl-name { font-size: 24px !important; white-space: normal; }
   #vid-skip { bottom: 16px; right: 16px; padding: 9px 18px; font-size: 11px; }
 }
-/* Touch: tell players how to pick a card out of the scrolling tray */
-#tray.scrolls .tray-card { touch-action: pan-x; }
-.tray-hint-touch { display: none; }
-#tray.scrolls .tray-hint-touch { display: inline; }
-#tray.scrolls .tray-hint-desktop { display: none; }
-/* Touch screens: fit every card without scrolling (wrapping into rows if needed),
-   so touching a card is always a drag — no swipe-vs-drag guessing */
-@media (pointer: coarse) {
-  .tray-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); overflow-x: hidden; }
-  .tray-card { min-width: 0; max-width: none; overflow: hidden; } /* clip, or it counts as overflow */
-  .tray-name { hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word; } /* "Perme-able", not "Permeabl/e" */
-  .tray-cat  { flex-wrap: wrap; white-space: normal; row-gap: 1px; }
-  .tray-meta { white-space: nowrap; gap: 3px; letter-spacing: -0.02em; }
+/* One row of cards; when they don't all fit, ‹ › arrows page through them.
+   Swiping never scrolls the row, so touching a card is always a drag. */
+.tray-row { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+.tray-row .tray-cards { flex: 1; min-width: 0; overflow-x: hidden; scroll-snap-type: x mandatory; scroll-behavior: smooth; }
+.tray-card { scroll-snap-align: start; overflow: hidden; }
+.tray-name { hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word; }
+.tray-meta { white-space: nowrap; gap: 3px; }
+.tray-arrow {
+  display: none; flex: 0 0 30px; align-items: center; justify-content: center;
+  font-size: 22px; line-height: 1; color: #3d4f72; cursor: pointer;
+  background: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.9);
+  border-radius: 12px; box-shadow: inset 0 1px 0 #fff;
+  transition: background 0.15s, opacity 0.15s;
 }
-@media (pointer: coarse) and (max-width: 700px) {
-  .tray-cards { grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 5px; }
-  .tray-card { padding: 5px 5px 6px; gap: 2px; }
-  .tray-name { font-size: 9px; min-height: 22px; }
-  .tray-cat { font-size: 7px; }
-  .tray-meta { font-size: 8px; }
-}
+.tray-arrow:hover { background: rgba(255,255,255,0.85); }
+.tray-arrow:disabled { opacity: 0.3; cursor: default; }
+#tray.scrolls .tray-arrow { display: flex; }
 .howto-rotate { display: none; }
 @media (orientation: portrait) and (max-width: 700px) {
   .howto-rotate { display: block; margin-bottom: 14px; font-size: 12px; text-align: center; color: #1d4ed8; font-weight: 600; }
@@ -1177,9 +1173,13 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 <div id="tray">
   <div class="tray-head">
     <span class="tray-title">Nature-Based Solutions</span>
-    <span class="tray-hint" id="tray-hint"><span class="tray-hint-desktop">Drag a card onto a block</span><span class="tray-hint-touch">Swipe to browse · hold or pull up a card to drag it</span></span>
+    <span class="tray-hint" id="tray-hint">Drag a card onto a block</span>
   </div>
-  <div class="tray-cards" id="tray-cards"></div>
+  <div class="tray-row">
+    <button class="tray-arrow" id="tray-prev" aria-label="Previous solutions">‹</button>
+    <div class="tray-cards" id="tray-cards"></div>
+    <button class="tray-arrow" id="tray-next" aria-label="More solutions">›</button>
+  </div>
 </div>
 <div id="drag-ghost"></div>
 
@@ -2541,6 +2541,8 @@ const modelMgr = {
 
   reset() {
     Object.values(this.cells).forEach(cell => {
+      cell.pending = null;
+      cell.loadEpoch++; // a model still downloading for this cell is discarded when it arrives
       if (cell.mesh)      { scene.remove(cell.mesh);           cell.mesh      = null; }
       if (cell.departing) { scene.remove(cell.departing.mesh); cell.departing = null; }
     });
@@ -2796,6 +2798,8 @@ function removeSolution(col, row) {
 
 function resetBoard() {
   boardState = {};
+  lastState  = {};
+  rebuildSummaryPanel(); // the right-hand list otherwise keeps the previous round's solutions
 }
 
 function applyBoardState(state) {
@@ -3572,8 +3576,6 @@ var trayMgr = (() => {
         <div class="tray-placed-tag"></div>
         <button class="tray-remove" title="Remove from board" style="display:none">✕</button>`;
       card.addEventListener('pointerdown', e => onDown(e, sol, card));
-      // While a card is being dragged, the finger must not scroll the tray underneath it
-      card.addEventListener('touchmove', e => { if (drag) e.preventDefault(); }, { passive: false });
       card.querySelector('.tray-remove').addEventListener('pointerdown', e => e.stopPropagation());
       card.querySelector('.tray-remove').addEventListener('click', () => {
         const key = cellOf(sol);
@@ -3585,9 +3587,28 @@ var trayMgr = (() => {
 
   // Re-sync cards with the board: placed tags + affordability
   // Only when the cards genuinely overflow does a horizontal swipe mean "scroll"
+  // ‹ › arrows appear only when the cards don't all fit, and page a screenful at a time
+  const prevBtn = document.getElementById('tray-prev');
+  const nextBtn = document.getElementById('tray-next');
   function updateScrolls() {
-    _trayEl.classList.toggle('scrolls', cardsEl.scrollWidth > cardsEl.clientWidth + 2);
+    const max = cardsEl.scrollWidth - cardsEl.clientWidth;
+    _trayEl.classList.toggle('scrolls', max > 2);
+    prevBtn.disabled = cardsEl.scrollLeft <= 1;
+    nextBtn.disabled = cardsEl.scrollLeft >= max - 1;
   }
+  function page(dir) {
+    const step = Math.max(cardsEl.clientWidth - 40, 80); // keep a sliver of the last card in view
+    cardsEl.scrollBy({ left: dir * step, behavior: 'smooth' });
+  }
+  prevBtn.addEventListener('click', () => page(-1));
+  nextBtn.addEventListener('click', () => page(1));
+  cardsEl.addEventListener('scroll', updateScrolls);
+  // Mouse wheel / trackpad also scrolls the row sideways
+  cardsEl.addEventListener('wheel', e => {
+    if (!_trayEl.classList.contains('scrolls')) return;
+    e.preventDefault();
+    cardsEl.scrollBy({ left: e.deltaY + e.deltaX });
+  }, { passive: false });
   window.addEventListener('resize', () => { updateScrolls(); updateViewLift(); });
 
   function refresh() {
@@ -3656,31 +3677,8 @@ var trayMgr = (() => {
 
   function onDown(e, sol, card) {
     if (gameState !== GS.GAME || e.button > 0) return;
-    if (e.pointerType !== 'touch' || !_trayEl.classList.contains('scrolls')) { e.preventDefault(); startDrag(e, sol, card); return; }
-    // Touch: wait to see the gesture. A flat sideways swipe is the browser scrolling
-    // the tray (it sends pointercancel); any upward pull — even steeply diagonal, toward
-    // a block off to the side — or a short press-and-hold picks the card up. Once picked
-    // up, the card's touchmove listener blocks the tray from scrolling.
-    // The hold is measured with the events' own timestamps, not a timer: on a busy
-    // phone, move events can arrive late and a timer would mistake a swipe for a hold.
-    const x0 = e.clientX, y0 = e.clientY, t0 = e.timeStamp;
-    let movedEarly = false;
-    const pick = ev => { done(); startDrag(ev, sol, card); };
-    const move = ev => {
-      const dx = ev.clientX - x0, dy = ev.clientY - y0;
-      const held = ev.timeStamp - t0 >= 250;
-      if (!held && Math.hypot(dx, dy) > 8) movedEarly = true;   // moved straight away: not a hold
-      if (held && !movedEarly) pick(ev);                         // held still, now moving any way
-      else if (-dy > 8 && -dy > Math.abs(dx) * 0.4) pick(ev);    // upward pull, up to ~68° off vertical
-    };
-    const done = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', done);
-      window.removeEventListener('pointercancel', done);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', done);
-    window.addEventListener('pointercancel', done);
+    e.preventDefault(); // cards are touch-action: none — the row only moves via the arrows
+    startDrag(e, sol, card);
   }
 
   function startDrag(e, sol, card) {
