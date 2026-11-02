@@ -862,32 +862,43 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px;
   scrollbar-width: thin;
 }
+/* Tray cards mirror the printed NBS cards: coloured frame (green = nature-based,
+   grey = grey infrastructure), cream panel, card title + block illustration */
 .tray-card {
-  flex: 1 1 0; min-width: 80px; max-width: 120px; position: relative;
-  display: flex; flex-direction: column; gap: 4px;
-  padding: 9px 9px 8px;
-  background: rgba(255,255,255,0.62);
-  border: 1px solid rgba(255,255,255,0.9);
-  border-radius: 14px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 3px 12px rgba(0,0,0,0.08);
+  --frame: #a1b96f; --frame-ink: #6f8a3c;
+  flex: 1 1 0; min-width: 84px; max-width: 124px; position: relative;
+  display: flex; flex-direction: column;
+  padding: 4px;
+  background: var(--frame);
+  border-radius: 12px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.14);
   cursor: grab; user-select: none; touch-action: none;
   transition: transform 0.15s, box-shadow 0.15s, opacity 0.2s;
 }
-.tray-card:hover { transform: translateY(-3px); box-shadow: inset 0 1px 0 #fff, 0 8px 20px rgba(0,0,0,0.14); }
+.tray-card.grey { --frame: #aaaaaa; --frame-ink: #707070; }
+.tray-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.2); }
 .tray-card.dragging { opacity: 0.35; }
-.tray-card.placed { background: rgba(255,255,255,0.32); }
 .tray-card.unaffordable { opacity: 0.45; }
-.tray-swatch { height: 4px; border-radius: 99px; }
-.tray-name {
-  font-size: 11px; font-weight: 800; color: #15192e; line-height: 1.2;
-  letter-spacing: -0.01em; min-height: 26px;
+.tray-face {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+  background: #edebdf; border-radius: 8px; padding: 5px 5px 4px; position: relative;
 }
-.tray-cat { font-size: 8px; font-weight: 700; letter-spacing: 0.06em; color: #9aaac4; display: flex; justify-content: space-between; gap: 4px; white-space: nowrap; }
-.tray-bio { letter-spacing: 0; flex-shrink: 0; }
-.tray-meta { display: flex; justify-content: space-between; font-size: 9px; font-weight: 600; color: #5a6a8e; }
+.tray-card.placed .tray-face { background: #dfe3cf; }
+.tray-name {
+  font-size: 8.5px; font-weight: 700; color: var(--frame-ink); line-height: 1.15;
+  letter-spacing: 0.02em; text-transform: uppercase; text-align: center;
+  min-height: 20px; display: flex; align-items: center; justify-content: center;
+}
+.tray-art { width: 100%; aspect-ratio: 1.2; object-fit: contain; pointer-events: none; }
+.tray-bio {
+  position: absolute; right: 4px; top: 50%;
+  font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 99px;
+  background: rgba(255,255,255,0.85);
+}
+.tray-meta { display: flex; justify-content: space-between; font-size: 8.5px; font-weight: 600; color: #5a6a8e; }
 .tray-placed-tag {
-  min-height: 11px; font-size: 8px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-  color: #16a34a;
+  min-height: 10px; font-size: 7.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #16a34a; text-align: center;
 }
 .tray-remove {
   position: absolute; top: 5px; right: 5px;
@@ -907,6 +918,9 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   border-left: 5px solid #ccc;
   white-space: nowrap;
 }
+#drag-ghost { display: none; align-items: center; gap: 8px; }
+#drag-ghost.show { display: flex; }
+#drag-ghost img { width: 34px; height: 34px; object-fit: contain; }
 #drag-ghost .ghost-tip { display: block; font-size: 10px; font-weight: 600; color: #5a6a8e; margin-top: 3px; }
 #drag-ghost .ghost-tip.bad { color: #dc2626; }
 #drag-ghost .ghost-tip.good { color: #16a34a; }
@@ -1061,6 +1075,39 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 .tray-arrow:hover { background: rgba(255,255,255,0.85); }
 .tray-arrow:disabled { opacity: 0.3; cursor: default; }
 #tray.scrolls .tray-arrow { display: flex; }
+
+/* Flip preview: hover a tray card (or tap it) and the full card pops up and turns over */
+#card-peek {
+  --frame: #a1b96f; --frame-ink: #6f8a3c;
+  position: fixed; z-index: 45; pointer-events: none; perspective: 1000px;
+  display: none; font-family: 'Neulis Sans', system-ui, sans-serif;
+}
+#card-peek.grey { --frame: #aaaaaa; --frame-ink: #707070; }
+#card-peek.show { display: block; }
+.peek-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.3, 0.7, 0.25, 1); }
+#card-peek.flipped .peek-inner { transform: rotateY(180deg); }
+.peek-face {
+  position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  border-radius: calc(var(--ph, 340) * 0.047px); padding: calc(var(--ph, 340) * 0.026px); background: var(--frame);
+  box-shadow: 0 22px 50px rgba(0,0,0,0.45); display: flex; flex-direction: column;
+}
+.peek-front .peek-panel {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  background: #edebdf; border-radius: 10px; padding: 12px 10px;
+}
+.peek-title { font-size: calc(var(--ph, 340) * 0.044px); font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase;
+  text-align: center; color: var(--frame-ink); }
+.peek-front img { width: 82%; margin: auto; }
+.peek-back {
+  transform: rotateY(180deg); color: #fff; align-items: center; text-align: center;
+  outline: 1px solid rgba(255,255,255,0.65); outline-offset: calc(var(--ph, 340) * -0.026px);
+  padding: calc(var(--ph, 340) * 0.06px) calc(var(--ph, 340) * 0.053px) calc(var(--ph, 340) * 0.04px);
+}
+.peek-back .peek-title { color: #fff; }
+.peek-back p { font-family: 'Roboto Mono', monospace; font-size: calc(var(--ph, 340) * 0.031px); line-height: 1.5;
+  margin-top: calc(var(--ph, 340) * 0.035px); }
+.peek-back img { width: calc(var(--ph, 340) * 0.13px); margin-top: auto; }
 .howto-rotate { display: none; }
 @media (orientation: portrait) and (max-width: 700px) {
   .howto-rotate { display: block; margin-bottom: 14px; font-size: 12px; text-align: center; color: #1d4ed8; font-weight: 600; }
@@ -1182,6 +1229,12 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   </div>
 </div>
 <div id="drag-ghost"></div>
+<div id="card-peek">
+  <div class="peek-inner">
+    <div class="peek-face peek-front"><div class="peek-panel"><div class="peek-title" id="peek-title-f"></div><img id="peek-art" alt=""></div></div>
+    <div class="peek-face peek-back"><div class="peek-title" id="peek-title-b"></div><p id="peek-text"></p><img src="assets/img/logo-light.png" alt="runoff"></div>
+  </div>
+</div>
 
 <!-- ── BUDGET WARNING TOAST ──────────────────────────────────── -->
 <div id="budget-warning">
@@ -1423,17 +1476,17 @@ function cellCenter3D(c, r) {
 
 const NBS_DEFS = {
   //                                                                                                                                          buildTime noise carbon
-  greenroof:         { label: 'Green Rooftop',      cap: 0.035, req: 'built',  color: '#2ecc71', cat: 'ADAPT',    img: 'green_roof.png',              capLabel: '35 L/m²',  buildTime: 8,  noise: 3, carbon: -2.0 },
-  permeablepavement: { label: 'Permeable Pavement', cap: 0.22,  req: 'sealed', color: '#95a5a6', cat: 'ADAPT',    img: 'depaving_unsealing.png',       capLabel: '220 L/m²', buildTime: 5,  noise: 1, carbon:  1.0 },
-  engineeredsoil:    { label: 'Engineered Soil',    cap: 0.25,  req: 'green',  color: '#e67e22', cat: 'ADAPT',    img: 'structural_soil.png',          capLabel: '250 L/m²', buildTime: 12, noise: 2, carbon: -0.5 },
+  greenroof:         { label: 'Green Rooftops',      cap: 0.035, req: 'built',  color: '#2ecc71', cat: 'ADAPT',    img: 'green_roof.png',              capLabel: '35 L/m²',  buildTime: 8,  noise: 3, carbon: -2.0 },
+  permeablepavement: { label: 'Permeable Pavements', cap: 0.22,  req: 'sealed', color: '#95a5a6', cat: 'ADAPT',    img: 'depaving_unsealing.png',       capLabel: '220 L/m²', buildTime: 5,  noise: 1, carbon:  1.0 },
+  engineeredsoil:    { label: 'Structural Soil',    cap: 0.25,  req: 'green',  color: '#e67e22', cat: 'ADAPT',    img: 'structural_soil.png',          capLabel: '250 L/m²', buildTime: 12, noise: 2, carbon: -0.5 },
   urbanfarming:      { label: 'Urban Farming',      cap: 0.18,  req: 'built',  color: '#27ae60', cat: 'ADAPT',    img: 'green_roof.png',              capLabel: '180 L/m²', buildTime: 10, noise: 4, carbon: -2.5 },
-  greenfacades:      { label: 'Green Facades',      cap: 0.12,  req: 'built',  color: '#9b59b6', cat: 'PRESERVE', img: 'green_roof.png',              capLabel: '120 L/m²', buildTime: 7,  noise: 6, carbon: -0.8 },
-  undergroundtanks:  { label: 'Underground Tank',   cap: 0.50,  req: 'sealed', color: '#2980b9', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '500 L/m²', buildTime: 20, noise: 0, carbon:  8.0, embodied: true },
-  sewersystem:       { label: 'Sewer Upgrade',      cap: 0.35,  req: 'sealed', color: '#7f8c8d', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '350 L/m²', buildTime: 18, noise: 0, carbon:  6.0, embodied: true },
-  wetlands:          { label: 'Wetlands',           cap: 0.60,  req: 'green',  color: '#1a9850', cat: 'PRESERVE', img: 'structural_soil.png',          capLabel: '600 L/m²', buildTime: 25, noise: 2, carbon: -8.0 },
-  riparian:          { label: 'Riparian Buffer',    cap: 0.40,  req: 'green',  color: '#2ecc71', cat: 'PRESERVE', img: 'structural_soil.png',          capLabel: '400 L/m²', buildTime: 15, noise: 1, carbon: -4.0 },
-  terracing:         { label: 'Terracing',          cap: 0.30,  req: 'green',  color: '#d35400', cat: 'ADAPT',    img: 'structural_soil.png',          capLabel: '300 L/m²', buildTime: 18, noise: 3, carbon: -1.5 },
-  leakingdam:        { label: 'Leaking Dam',        cap: 0.35,  req: 'sealed', color: '#8e44ad', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '350 L/m²', buildTime: 22, noise: 0, carbon:  4.5, embodied: true },
+  greenfacades:      { label: 'Green Walls',      cap: 0.12,  req: 'built',  color: '#9b59b6', cat: 'PRESERVE', img: 'green_roof.png',              capLabel: '120 L/m²', buildTime: 7,  noise: 6, carbon: -0.8 },
+  undergroundtanks:  { label: 'Underground Tanks',   cap: 0.50,  req: 'sealed', color: '#2980b9', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '500 L/m²', buildTime: 20, noise: 0, carbon:  8.0, embodied: true },
+  sewersystem:       { label: 'Sewer System',      cap: 0.35,  req: 'sealed', color: '#7f8c8d', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '350 L/m²', buildTime: 18, noise: 0, carbon:  6.0, embodied: true },
+  wetlands:          { label: 'Wetland Creation',           cap: 0.60,  req: 'green',  color: '#1a9850', cat: 'PRESERVE', img: 'structural_soil.png',          capLabel: '600 L/m²', buildTime: 25, noise: 2, carbon: -8.0 },
+  riparian:          { label: 'Riparian Buffers',    cap: 0.40,  req: 'green',  color: '#2ecc71', cat: 'PRESERVE', img: 'structural_soil.png',          capLabel: '400 L/m²', buildTime: 15, noise: 1, carbon: -4.0 },
+  terracing:         { label: 'Terraces',          cap: 0.30,  req: 'green',  color: '#d35400', cat: 'ADAPT',    img: 'structural_soil.png',          capLabel: '300 L/m²', buildTime: 18, noise: 3, carbon: -1.5 },
+  leakingdam:        { label: 'Check Dams',        cap: 0.35,  req: 'sealed', color: '#8e44ad', cat: 'PROTECT',  img: 'infiltration_trenches.png',   capLabel: '350 L/m²', buildTime: 22, noise: 0, carbon:  4.5, embodied: true },
 };
 
 // Biodiversity / ecology impact — signed: positive = enhances ecology, negative = damages it
@@ -3102,7 +3155,7 @@ function setState(s) {
   _panelEl.style.display        = (s === GS.GAME) ? 'flex' : 'none';
   _metricsPanelEl.style.display = (s === GS.GAME) ? 'flex' : 'none';
   _trayEl.classList.toggle('visible', s === GS.GAME);
-  if (s !== GS.GAME) trayMgr.cancelDrag();
+  if (s !== GS.GAME) { trayMgr.cancelDrag(); trayMgr.hidePeek(); }
   if (s === GS.GAME) {
     document.getElementById('panel-level-name').textContent = LEVEL_LABELS[_currentLevel] || '';
     trayMgr.refresh();
@@ -3530,6 +3583,23 @@ document.getElementById('lvl-select').addEventListener('click', () => levelSelec
 // a card already on the board moves when dropped elsewhere, and is removed
 // when dropped back on the tray.
 // ══════════════════════════════════════════════════════════════
+// From the printed NBS cards: back-of-card descriptions and which cards are grey infrastructure
+const CARD_TEXT = {
+  greenfacades:      "Green walls use plants on vertical surfaces to slow down rainwater, cool buildings, and add vegetation where ground space is limited. They work best in dense urban fabric, on building façades, courtyards, or narrow streets where there is not enough space for larger green areas.",
+  permeablepavement: "Permeable pavements allow rainwater to pass through the ground instead of running quickly over hard surfaces. They are useful in streets, sidewalks, parking areas, plazas, and courtyards, especially in dense urban areas with too much concrete and limited soil absorption.",
+  greenroof:         "Green rooftops cover buildings with soil and vegetation, helping absorb rainfall before it reaches the street drainage system. They are especially effective in dense urban areas where open land is limited, turning unused roof surfaces into water-retaining, cooling, and biodiversity-supporting spaces.",
+  urbanfarming:      "Urban farming uses productive green spaces to grow food while also helping the city absorb rainwater. It can be applied on rooftops, vacant lots, courtyards, or community gardens, mostly in urban areas where green space is limited but social and ecological benefits are needed.",
+  engineeredsoil:    "Structural soil is an engineered soil system that supports tree roots while also carrying the weight of pavements and streets. It is useful in dense urban areas, especially along sidewalks, roads, and plazas, where trees need space underground to grow and absorb stormwater.",
+  undergroundtanks:  "Underground tanks are gray infrastructure systems that store excess rainwater below the surface during heavy rainfall. They are useful in dense urban areas where there is little space above ground. The collected water can be slowly released, reused, or redirected after the flood peak passes.",
+  sewersystem:       "Sewer systems are gray infrastructure networks that collect and transport stormwater away from streets and buildings. They are essential in dense urban areas, but during extreme rainfall they can become overloaded. They work best when combined with nature-based solutions that reduce the amount of runoff entering the system.",
+  wetlands:          "Wetland creation uses low-lying planted areas to collect, slow, filter, and store water naturally. Wetlands are most suitable for larger open spaces, river edges, parks, or peri-urban and natural areas. They can reduce flood peaks while creating habitats for birds, insects, and aquatic life.",
+  riparian:          "Riparian buffers are vegetated zones along rivers, streams, or drainage channels. They slow down runoff, stabilize riverbanks, filter pollutants, and give water more room during floods. They are best applied in natural tissue, river corridors, mountain edges, parks, or urban areas near waterways.",
+  leakingdam:        "Check dams are small barriers placed across slopes, gullies, or drainage paths to slow down fast-moving water. They are especially useful in mountain areas, steep terrain, and upstream landscapes where rainfall can quickly turn into runoff before reaching the city.",
+  terracing:         "Terraces reshape steep slopes into stepped surfaces that slow water movement and reduce erosion. They help rainwater stay longer in the soil instead of flowing downhill too quickly. Terraces are best used in mountain areas, agricultural land, parks, and sloped natural landscapes above urban zones.",
+};
+const GREY_INFRA = new Set(['undergroundtanks', 'sewersystem']);
+const cardArt = sol => `assets/img/cards/${sol}.webp`;
+
 const TRAY_ORDER = [
   'greenroof', 'greenfacades', 'urbanfarming', 'permeablepavement', 'engineeredsoil',
   'terracing', 'riparian', 'wetlands', 'leakingdam', 'sewersystem', 'undergroundtanks',
@@ -3537,9 +3607,9 @@ const TRAY_ORDER = [
 
 // Break points for the long names, so narrow phone cards split them at a syllable
 // (not every browser ships a hyphenation dictionary for CSS hyphens: auto)
-const SOFT_HYPHENS = { Underground: 'Under\u00ADground', Engineered: 'Engi\u00ADneered', Permeable: 'Perme\u00ADable' };
+const SOFT_HYPHENS = { Underground: 'Under\u00ADground', Structural: 'Struc\u00ADtural', Permeable: 'Perme\u00ADable' };
 function softHyphenate(label) {
-  return label.replace(/\b(Underground|Engineered|Permeable)\b/g, w => SOFT_HYPHENS[w]);
+  return label.replace(/\b(Underground|Structural|Permeable)\b/g, w => SOFT_HYPHENS[w]);
 }
 
 var trayMgr = (() => {
@@ -3566,16 +3636,29 @@ var trayMgr = (() => {
     for (const sol of TRAY_ORDER) {
       const def = NBS_DEFS[sol];
       const card = document.createElement('div');
-      card.className = 'tray-card';
+      card.className = 'tray-card' + (GREY_INFRA.has(sol) ? ' grey' : '');
       card.dataset.sol = sol;
       card.innerHTML = `
-        <div class="tray-swatch" style="background:${def.color}"></div>
-        <div class="tray-cat">${def.cat}<span class="tray-bio" style="color:${NBS_BIO[sol] >= 0 ? '#16a34a' : '#dc2626'}">🌿 ${NBS_BIO[sol] > 0 ? '+' : ''}${NBS_BIO[sol]}</span></div>
-        <div class="tray-name">${softHyphenate(def.label)}</div>
-        <div class="tray-meta"><span>💰 ${SOLUTION_COSTS[sol]}</span><span>${def.carbon > 0 ? '+' : ''}${def.carbon} t</span></div>
-        <div class="tray-placed-tag"></div>
+        <div class="tray-face">
+          <div class="tray-name">${softHyphenate(def.label)}</div>
+          <img class="tray-art" src="${cardArt(sol)}" alt="" draggable="false">
+          <span class="tray-bio" style="color:${NBS_BIO[sol] >= 0 ? '#16a34a' : '#dc2626'}">🌿 ${NBS_BIO[sol] > 0 ? '+' : ''}${NBS_BIO[sol]}</span>
+          <div class="tray-meta"><span>💰 ${SOLUTION_COSTS[sol]}</span><span>${def.carbon > 0 ? '+' : ''}${def.carbon} t</span></div>
+          <div class="tray-placed-tag"></div>
+        </div>
         <button class="tray-remove" title="Remove from board" style="display:none">✕</button>`;
       card.addEventListener('pointerdown', e => onDown(e, sol, card));
+      // Mouse hover: after a short pause the full card pops up and flips to its description
+      card.addEventListener('pointerenter', e => {
+        if (e.pointerType !== 'mouse' || drag || gameState !== GS.GAME) return;
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(() => peek.show(sol, card), 450);
+      });
+      card.addEventListener('pointerleave', e => {
+        if (e.pointerType !== 'mouse') return;
+        clearTimeout(hoverTimer);
+        peek.hide();
+      });
       card.querySelector('.tray-remove').addEventListener('pointerdown', e => e.stopPropagation());
       card.querySelector('.tray-remove').addEventListener('click', () => {
         const key = cellOf(sol);
@@ -3585,8 +3668,6 @@ var trayMgr = (() => {
     }
   }
 
-  // Re-sync cards with the board: placed tags + affordability
-  // Only when the cards genuinely overflow does a horizontal swipe mean "scroll"
   // ‹ › arrows appear only when the cards don't all fit, and page a screenful at a time
   const prevBtn = document.getElementById('tray-prev');
   const nextBtn = document.getElementById('tray-next');
@@ -3684,11 +3765,11 @@ var trayMgr = (() => {
   function startDrag(e, sol, card) {
     window.getSelection()?.removeAllRanges(); // drop any selection left from before the drag
     const def = NBS_DEFS[sol];
-    drag = { sol, cardEl: card, fromKey: cellOf(sol), overKey: null, overTray: false, check: null };
-    card.classList.add('dragging');
+    drag = { sol, cardEl: card, fromKey: cellOf(sol), overKey: null, overTray: false, check: null,
+             x0: e.clientX, y0: e.clientY, moved: false };
+    clearTimeout(hoverTimer);
     ghostEl.style.borderLeftColor = def.color;
-    ghostEl.innerHTML = `${def.label}<span class="ghost-tip">Drop on a block</span>`;
-    ghostEl.style.display = 'block';
+    ghostEl.innerHTML = `<img src="${cardArt(sol)}" alt=""><span>${def.label}<span class="ghost-tip">Drop on a block</span></span>`;
     moveGhost(e.clientX, e.clientY);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
@@ -3701,6 +3782,13 @@ var trayMgr = (() => {
 
   function onMove(e) {
     if (!drag) return;
+    if (!drag.moved) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return; // still just a press
+      drag.moved = true;
+      peek.hide();
+      drag.cardEl.classList.add('dragging');
+      ghostEl.classList.add('show');
+    }
     moveGhost(e.clientX, e.clientY);
     const tipEl = ghostEl.querySelector('.ghost-tip');
     const trayRect = _trayEl.getBoundingClientRect();
@@ -3726,8 +3814,9 @@ var trayMgr = (() => {
 
   function onUp() {
     if (!drag) return;
-    const { sol, fromKey, overKey, overTray, check } = drag;
+    const { sol, fromKey, overKey, overTray, check, moved, cardEl } = drag;
     cancelDrag();
+    if (!moved) { peek.toggle(sol, cardEl); return; } // a tap/click: show the card, never remove it
     if (overTray && fromKey) {
       const [c, r] = fromKey.split('_').map(Number);
       removeSolution(c, r);
@@ -3756,12 +3845,48 @@ var trayMgr = (() => {
     }
     drag.cardEl.classList.remove('dragging');
     _trayEl.classList.remove('drop-remove');
-    ghostEl.style.display = 'none';
+    ghostEl.classList.remove('show');
     drag = null;
   }
 
+  // ── Card preview: the full printed card pops up above the tray and turns over ──
+  let hoverTimer = null;
+  const peek = (() => {
+    const el = document.getElementById('card-peek');
+    let current = null, flipTimer = null;
+    function show(sol, card) {
+      const def = NBS_DEFS[sol];
+      current = sol;
+      el.classList.toggle('grey', GREY_INFRA.has(sol));
+      document.getElementById('peek-title-f').textContent = def.label;
+      document.getElementById('peek-title-b').textContent = def.label;
+      document.getElementById('peek-art').src = cardArt(sol);
+      document.getElementById('peek-text').textContent = CARD_TEXT[sol] || '';
+      // Card proportions (255x340), centred over the card, sitting above the tray when there's
+      // room — on short screens (phone landscape) it may overlap the tray rather than shrink
+      const cr = card.getBoundingClientRect(), tr = _trayEl.getBoundingClientRect();
+      const h = Math.min(340, window.innerHeight - 24), w = h * 255 / 340;
+      el.style.width = w + 'px'; el.style.height = h + 'px';
+      el.style.setProperty('--ph', h);
+      el.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, cr.left + cr.width / 2 - w / 2)) + 'px';
+      el.style.top = Math.max(12, tr.top - h - 12) + 'px';
+      el.classList.remove('flipped');
+      el.classList.add('show');
+      clearTimeout(flipTimer);
+      flipTimer = setTimeout(() => el.classList.add('flipped'), 380); // a beat on the front, then turn over
+    }
+    function hide() {
+      clearTimeout(flipTimer);
+      el.classList.remove('show', 'flipped');
+      current = null;
+    }
+    return { show, hide, toggle: (sol, card) => (current === sol ? hide() : show(sol, card)) };
+  })();
+  // Tapping anywhere else closes the preview
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('.tray-card')) peek.hide(); });
+
   build();
-  return { refresh, cancelDrag };
+  return { refresh, cancelDrag, hidePeek: () => peek.hide() };
 })();
 
 // ── Boot (all definitions are above this point) ───────────────────
