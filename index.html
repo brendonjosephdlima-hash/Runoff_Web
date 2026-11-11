@@ -1108,9 +1108,43 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
 .peek-back p { font-family: 'Roboto Mono', monospace; font-size: calc(var(--ph, 340) * 0.031px); line-height: 1.5;
   margin-top: calc(var(--ph, 340) * 0.035px); }
 .peek-back img { width: calc(var(--ph, 340) * 0.13px); margin-top: auto; }
-.howto-rotate { display: none; }
-@media (orientation: portrait) and (max-width: 700px) {
-  .howto-rotate { display: block; margin-bottom: 14px; font-size: 12px; text-align: center; color: #1d4ed8; font-weight: 600; }
+
+/* ── Phone, upright: slim panels across the top, short cards, city in between ── */
+@media (max-width: 700px) and (orientation: portrait) {
+  #panel { width: calc(50% - 12px); }
+  .panel-header { padding: 6px 8px 4px; }
+  .panel-logo-img { height: 18px; }
+  #storm-timer-wrap { margin: 4px 6px; padding: 4px; }
+  #stormTimer { font-size: 22px; }
+  #metrics-panel { width: calc(50% - 12px); }
+  #tray { padding: 6px 6px 8px; }
+  .tray-hint { display: none; }
+  .tray-arrow { flex-basis: 22px; font-size: 18px; border-radius: 9px; }
+  .tray-row { gap: 4px; }
+  .tray-cards { gap: 6px; }
+  .tray-card { flex: 0 0 74px; padding: 3px; border-radius: 10px; }
+  .tray-face { padding: 4px 3px 3px; }
+  .tray-name { font-size: 8.5px; min-height: 20px; }
+  .tray-art { aspect-ratio: 1.6; }
+  .tray-meta { font-size: 8px; }
+  #advisor.adv-in, #budget-warning { bottom: 150px; }
+}
+/* ── Phone, sideways: a low tray so the city keeps most of the height ── */
+@media (max-height: 500px) and (orientation: landscape) {
+  #panel { width: 118px; }
+  #metrics-panel { width: 140px; }
+  #tray { left: 134px; right: 156px; padding: 4px 6px 6px; gap: 2px; }
+  .tray-head { display: none; }
+  .tray-arrow { flex-basis: 22px; font-size: 18px; border-radius: 9px; }
+  .tray-row { gap: 4px; }
+  .tray-cards { gap: 6px; }
+  .tray-card { flex: 0 0 76px; padding: 3px; border-radius: 10px; }
+  .tray-face { padding: 3px 3px 2px; gap: 1px; }
+  .tray-name { font-size: 8px; min-height: 18px; }
+  .tray-art { aspect-ratio: 2.2; }
+  .tray-meta { font-size: 7.5px; }
+  .tray-placed-tag { min-height: 0; }
+  #advisor.adv-in, #budget-warning { bottom: 100px; }
 }
 </style>
 </head>
@@ -1279,7 +1313,6 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
       <li>Each solution can be used <b>once</b>. Drag a placed one to another block to move it, or back to the tray to remove it.</li>
       <li>Mitigate <b>50% of the runoff</b> before time runs out to beat the flood.</li>
     </ol>
-    <div class="howto-rotate">📱 Tip: turn your phone sideways for the best view</div>
     <div class="landing-buttons">
       <button class="screen-btn primary" id="btn-choose-block">Choose a block &nbsp;›</button>
     </div>
@@ -1396,11 +1429,34 @@ window.addEventListener('resize', updateUiScale);
 
 // The tray covers the bottom of the screen (up to a third on phones), so the game camera
 // frames the city in the space above it (px of screen hidden at the bottom; 0 = full screen)
-let _viewLift = 0;
+let _viewLift = 0, _viewTop = 0;
+// Phone held upright: its own framing (zoomed in on the block, fitted between the top panels and the tray)
+const PHONE_PORTRAIT = matchMedia('(max-width: 700px) and (orientation: portrait)');
+// This level's blocks in screen-aligned world units (u = right, v = up; iso camera looks along -(1,1,1))
+let _boundsFor = null, _bounds = null;
+function levelScreenBounds() {
+  if (_boundsFor === CELLS) return _bounds;
+  const h = CELL_SIZE / 2, b = { u0: Infinity, u1: -Infinity, v0: Infinity, v1: -Infinity };
+  for (const { c, r } of CELLS) {
+    const [x, , z] = cellCenter3D(c, r);
+    for (const dx of [-h, h]) for (const dz of [-h, h]) for (const y of [0, 1.2]) {
+      const px = x + dx, pz = z + dz, u = (px - pz) / Math.SQRT2, v = (2 * y - px - pz) / Math.sqrt(6);
+      b.u0 = Math.min(b.u0, u); b.u1 = Math.max(b.u1, u); b.v0 = Math.min(b.v0, v); b.v1 = Math.max(b.v1, v);
+    }
+  }
+  _boundsFor = CELLS; return (_bounds = b);
+}
 function updateViewLift() {
   const tray = document.getElementById('tray');
   const shown = tray.classList.contains('visible'); // every screen: front blocks were hiding behind the tray
   _viewLift = shown ? Math.max(0, window.innerHeight - tray.getBoundingClientRect().top) : 0;
+  _viewTop = 0;
+  if (shown && PHONE_PORTRAIT.matches) {
+    for (const id of ['panel', 'metrics-panel']) {
+      const r = document.getElementById(id).getBoundingClientRect();
+      if (r.height) _viewTop = Math.max(_viewTop, r.bottom);
+    }
+  }
   _camDirty = true;
 }
 window.addEventListener('resize', () => updateViewLift());
@@ -1660,11 +1716,29 @@ function _updateCamera() {
   _camLZ += (_tgtLZ - _camLZ) * L;
   const moved = Math.abs(_camF - pF) > 1e-4 || Math.abs(_camLX - pLX) > 1e-4 || Math.abs(_camLZ - pLZ) > 1e-4;
   const W = window.innerWidth, H = window.innerHeight, a = W / H;
-  // portrait: zoom out until the grid fits across; phones: also fit it into the space above the tray
-  const f = _camF * Math.max(1, PORTRAIT_FIT / a) * (H / (H - _viewLift));
+  let f, shift;
+  let shiftX = 0;
+  if (PHONE_PORTRAIT.matches && CELLS.length) {
+    // upright phone: frame this level's blocks so they fill the width, centred in the band
+    // between the top panels and the tray (blended out while zoomed in on a single block)
+    const band = Math.max(1, H - _viewLift - _viewTop);
+    const b = levelScreenBounds();
+    const fitF = Math.max((b.u1 - b.u0) * 1.06 / a, (b.v1 - b.v0) * 1.1 * H / band);
+    f = _camF * fitF / _levelFrustumDefault;
+    const w = Math.min(1, Math.max(0, (_camF - FRUSTUM_ZOOM_IN) / (_levelFrustumDefault - FRUSTUM_ZOOM_IN)));
+    const tU = (_camLX - _camLZ) / Math.SQRT2, tV = (-_camLX - _camLZ) / Math.sqrt(6);
+    const cU = (b.u0 + b.u1) / 2, cV = (b.v0 + b.v1) / 2;
+    const fitShift = H / 2 - (cV - tV) * H / f - (_viewTop + band / 2);
+    shift  = w * -fitShift + (1 - w) * (_viewLift - _viewTop) / 2;
+    shiftX = w * (cU - tU) * W / (f * a);
+  } else {
+    // portrait: zoom out until the grid fits across; also fit it into the space above the tray
+    f = _camF * Math.max(1, PORTRAIT_FIT / a) * (H / (H - _viewLift));
+    shift = _viewLift / 2;
+  }
   camera.left   = -f * a / 2;  camera.right  = f * a / 2;
   camera.top    =  f / 2;      camera.bottom = -f / 2;
-  if (_viewLift) camera.setViewOffset(W, H, 0, _viewLift / 2, W, H); // shifts the picture up
+  if (shift || shiftX) camera.setViewOffset(W, H, shiftX, shift, W, H); // shifts the picture up (or down)
   else           camera.clearViewOffset();
   camera.updateProjectionMatrix();
   camera.position.set(_camLX + _CAM_OFFSET, _CAM_OFFSET, _camLZ + _CAM_OFFSET);
