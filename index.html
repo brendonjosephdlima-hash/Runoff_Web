@@ -1394,12 +1394,12 @@ function updateUiScale() {
 updateUiScale();
 window.addEventListener('resize', updateUiScale);
 
-// Phones: the tray covers up to a third of the screen, so the game camera frames the
-// city in the space above it (px of screen hidden at the bottom; 0 = use the full screen)
+// The tray covers the bottom of the screen (up to a third on phones), so the game camera
+// frames the city in the space above it (px of screen hidden at the bottom; 0 = full screen)
 let _viewLift = 0;
 function updateViewLift() {
   const tray = document.getElementById('tray');
-  const shown = PHONE_QUERY.matches && tray.classList.contains('visible');
+  const shown = tray.classList.contains('visible'); // every screen: front blocks were hiding behind the tray
   _viewLift = shown ? Math.max(0, window.innerHeight - tray.getBoundingClientRect().top) : 0;
   _camDirty = true;
 }
@@ -3616,10 +3616,6 @@ var trayMgr = (() => {
   const cardsEl  = document.getElementById('tray-cards');
   const hintEl   = document.getElementById('tray-hint');
   const ghostEl  = document.getElementById('drag-ghost');
-  const ray      = new THREE.Raycaster();
-  const ndc      = new THREE.Vector2();
-  const ground   = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  const groundHit = new THREE.Vector3();
 
   let drag = null; // { sol, cardEl, fromKey, overKey, overTray, check }
 
@@ -3707,24 +3703,33 @@ var trayMgr = (() => {
     }
   }
 
-  // Raycast the pointer onto block meshes, then fall back to the ground plane
+  // The block whose middle is nearest the pointer on screen. (Taking the first building
+  // the pointer touches made a block standing behind tall buildings — e.g. block 9 behind
+  // block 11's factories on the River Block — impossible to target.)
+  const _bbox = new THREE.Box3(), _mid = new THREE.Vector3();
+  function blockMid(cell) {
+    const m = cell.mesh;
+    if (!m) return _mid.set(cell.x, 0.3, cell.z);
+    if (cell.meshAnim || cell.pending) return _mid.set(cell.x, 0.3, cell.z); // still moving: use the ground centre
+    if (!m.userData.mid) m.userData.mid = _bbox.setFromObject(m).getCenter(new THREE.Vector3());
+    return _mid.copy(m.userData.mid);
+  }
+  function toScreen(v) {
+    const p = v.clone().project(camera);
+    return [(p.x + 1) / 2 * window.innerWidth, (1 - p.y) / 2 * window.innerHeight];
+  }
   function cellAt(x, y) {
-    ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1);
-    ray.setFromCamera(ndc, camera);
-    const meshes = Object.values(modelMgr.cells).map(cell => cell.mesh).filter(Boolean);
-    const hits = ray.intersectObjects(meshes, true);
-    for (const hit of hits) {
-      for (let o = hit.object; o; o = o.parent) {
-        if (o.userData.cellKey) return o.userData.cellKey;
-      }
+    // Accept a block within ~¾ of the on-screen spacing between neighbouring blocks
+    const [ax, ay] = toScreen(new THREE.Vector3(...cellCenter3D(0, 0)));
+    const [bx, by] = toScreen(new THREE.Vector3(...cellCenter3D(1, 0)));
+    const reach = Math.hypot(bx - ax, by - ay) * 0.75;
+    let best = null, bestD = reach;
+    for (const [key, cell] of Object.entries(modelMgr.cells)) {
+      const [sx, sy] = toScreen(blockMid(cell));
+      const d = Math.hypot(sx - x, sy - y);
+      if (d < bestD) { bestD = d; best = key; }
     }
-    if (ray.ray.intersectPlane(ground, groundHit)) {
-      const c = Math.floor((groundHit.x - _levelGridX) / CELL_SIZE);
-      const r = Math.floor(groundHit.z / CELL_SIZE);
-      const key = `${c}_${r}`;
-      if (CELL_KEY_TO_BLOCK[key]) return key;
-    }
-    return null;
+    return best;
   }
 
   // What dropping `sol` on `key` would do (moving a placed card frees its old cell first)
