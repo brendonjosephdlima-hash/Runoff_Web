@@ -1129,22 +1129,30 @@ body { width: 100vw; height: 100vh; overflow: hidden; background: #07071a; font-
   .tray-meta { font-size: 8px; }
   #advisor.adv-in, #budget-warning { bottom: 150px; }
 }
-/* ── Phone, sideways: a low tray so the city keeps most of the height ── */
+/* ── Phone, sideways: timer on the left, resources + a column of cards on the right,
+      city in the middle. The tray's top is set from JS to sit just under the resources panel. ── */
 @media (max-height: 500px) and (orientation: landscape) {
   #panel { width: 118px; }
-  #metrics-panel { width: 140px; }
-  #tray { left: 134px; right: 156px; padding: 4px 6px 6px; gap: 2px; }
+  #metrics-panel { width: 176px; }
+  #tray { left: auto; right: 8px; width: 176px; top: 120px; bottom: 8px;
+          padding: 5px; gap: 0; border-radius: 14px; }
   .tray-head { display: none; }
-  .tray-arrow { flex-basis: 22px; font-size: 18px; border-radius: 9px; }
-  .tray-row { gap: 4px; }
-  .tray-cards { gap: 6px; }
-  .tray-card { flex: 0 0 76px; padding: 3px; border-radius: 10px; }
+  .tray-row { flex: 1; min-height: 0; flex-direction: column; gap: 4px; }
+  .tray-row .tray-cards { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr;
+    grid-auto-rows: max-content; align-content: start; gap: 5px; overflow-x: hidden; overflow-y: hidden;
+    scroll-snap-type: y mandatory; padding-bottom: 0; }
+  .tray-card { min-width: 0; max-width: none; padding: 3px; border-radius: 10px; }
+  .tray-card:hover { transform: none; }
   .tray-face { padding: 3px 3px 2px; gap: 1px; }
-  .tray-name { font-size: 8px; min-height: 18px; }
-  .tray-art { aspect-ratio: 2.2; }
-  .tray-meta { font-size: 7.5px; }
-  .tray-placed-tag { min-height: 0; }
-  #advisor.adv-in, #budget-warning { bottom: 100px; }
+  .tray-name { font-size: 7.5px; min-height: 17px; }
+  .tray-art { aspect-ratio: 2; flex: none; height: auto; }
+  .tray-face { flex: none; }
+  .tray-bio { font-size: 7px; }
+  .tray-meta { font-size: 7px; }
+  .tray-placed-tag { min-height: 0; font-size: 6.5px; }
+  .tray-arrow { flex: 0 0 18px; font-size: 9px; border-radius: 8px; }
+  #advisor.adv-in, #budget-warning { bottom: 12px; left: 134px; right: 192px; }
+  .adv-bubble { max-width: 100%; }
 }
 </style>
 </head>
@@ -1429,19 +1437,36 @@ window.addEventListener('resize', updateUiScale);
 
 // The tray covers the bottom of the screen (up to a third on phones), so the game camera
 // frames the city in the space above it (px of screen hidden at the bottom; 0 = full screen)
-let _viewLift = 0, _viewTop = 0;
-// Phone held upright: its own framing (zoomed in on the block, fitted between the top panels and the tray)
-const PHONE_PORTRAIT = matchMedia('(max-width: 700px) and (orientation: portrait)');
-// This level's blocks in screen-aligned world units (u = right, v = up; iso camera looks along -(1,1,1))
+let _viewLift = 0;
+// Phones get their own framing: the level's blocks are fitted into the free rectangle between
+// the HUD panels and the tray (insets in px), zoomed in as far as they fit
+const PHONE_PORTRAIT  = matchMedia('(max-width: 700px) and (orientation: portrait)');
+const PHONE_LANDSCAPE = matchMedia('(max-height: 500px) and (orientation: landscape)');
+const isPhoneFrame = () => PHONE_PORTRAIT.matches || PHONE_LANDSCAPE.matches;
+const _inset = { l: 0, t: 0, r: 0, b: 0 };
+// This level's blocks in screen-aligned world units (u = right, v = up; iso camera looks along -(1,1,1)).
+// Uses the loaded models' boxes once they're all in; a footprint estimate until then.
 let _boundsFor = null, _bounds = null;
 function levelScreenBounds() {
-  if (_boundsFor === CELLS) return _bounds;
-  const h = CELL_SIZE / 2, b = { u0: Infinity, u1: -Infinity, v0: Infinity, v1: -Infinity };
-  for (const { c, r } of CELLS) {
-    const [x, , z] = cellCenter3D(c, r);
-    for (const dx of [-h, h]) for (const dz of [-h, h]) for (const y of [0, 1.2]) {
-      const px = x + dx, pz = z + dz, u = (px - pz) / Math.SQRT2, v = (2 * y - px - pz) / Math.sqrt(6);
-      b.u0 = Math.min(b.u0, u); b.u1 = Math.max(b.u1, u); b.v0 = Math.min(b.v0, v); b.v1 = Math.max(b.v1, v);
+  const cells = Object.values(modelMgr.cells);
+  const ready = cells.length === CELLS.length && cells.length > 0 && cells.every(c => c.mesh && !c.meshAnim && !c.pending);
+  if (_boundsFor === CELLS && (_bounds.exact || !ready)) return _bounds;
+  const b = { u0: Infinity, u1: -Infinity, v0: Infinity, v1: -Infinity, exact: ready };
+  const add = (px, y, pz) => {
+    const u = (px - pz) / Math.SQRT2, v = (2 * y - px - pz) / Math.sqrt(6);
+    b.u0 = Math.min(b.u0, u); b.u1 = Math.max(b.u1, u); b.v0 = Math.min(b.v0, v); b.v1 = Math.max(b.v1, v);
+  };
+  if (ready) {
+    const box = new THREE.Box3();
+    for (const c of cells) {
+      box.setFromObject(c.mesh);
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) add(x, y, z);
+    }
+  } else {
+    const h = CELL_SIZE / 2;
+    for (const { c, r } of CELLS) {
+      const [x, , z] = cellCenter3D(c, r);
+      for (const dx of [-h, h]) for (const dz of [-h, h]) for (const y of [0, 1.2]) add(x + dx, y, z + dz);
     }
   }
   _boundsFor = CELLS; return (_bounds = b);
@@ -1449,13 +1474,23 @@ function levelScreenBounds() {
 function updateViewLift() {
   const tray = document.getElementById('tray');
   const shown = tray.classList.contains('visible'); // every screen: front blocks were hiding behind the tray
-  _viewLift = shown ? Math.max(0, window.innerHeight - tray.getBoundingClientRect().top) : 0;
-  _viewTop = 0;
-  if (shown && PHONE_PORTRAIT.matches) {
-    for (const id of ['panel', 'metrics-panel']) {
-      const r = document.getElementById(id).getBoundingClientRect();
-      if (r.height) _viewTop = Math.max(_viewTop, r.bottom);
-    }
+  const W = window.innerWidth, H = window.innerHeight;
+  const box = id => { const r = document.getElementById(id).getBoundingClientRect(); return r.height ? r : null; };
+  _inset.l = _inset.t = _inset.r = _inset.b = 0;
+  if (shown && PHONE_LANDSCAPE.matches) {
+    // sideways phone: cards sit in a column on the right under the resources panel
+    const m = box('metrics-panel');
+    tray.style.top = ((m ? m.bottom : 0) + 6) + 'px';
+    _viewLift = 0;
+    const p = box('panel'), t = tray.getBoundingClientRect();
+    _inset.l = p ? p.right : 0;
+    _inset.r = Math.max(0, W - t.left);
+  } else {
+    tray.style.top = '';
+    _viewLift = shown ? Math.max(0, H - tray.getBoundingClientRect().top) : 0;
+    _inset.b = _viewLift;
+    if (shown && PHONE_PORTRAIT.matches)
+      for (const id of ['panel', 'metrics-panel']) { const r = box(id); if (r) _inset.t = Math.max(_inset.t, r.bottom); }
   }
   _camDirty = true;
 }
@@ -1716,21 +1751,21 @@ function _updateCamera() {
   _camLZ += (_tgtLZ - _camLZ) * L;
   const moved = Math.abs(_camF - pF) > 1e-4 || Math.abs(_camLX - pLX) > 1e-4 || Math.abs(_camLZ - pLZ) > 1e-4;
   const W = window.innerWidth, H = window.innerHeight, a = W / H;
-  let f, shift;
-  let shiftX = 0;
-  if (PHONE_PORTRAIT.matches && CELLS.length) {
-    // upright phone: frame this level's blocks so they fill the width, centred in the band
-    // between the top panels and the tray (blended out while zoomed in on a single block)
-    const band = Math.max(1, H - _viewLift - _viewTop);
+  let f, shift, shiftX = 0;
+  if (isPhoneFrame() && CELLS.length) {
+    // phones: fit this level's blocks into the free rectangle between the panels and the tray,
+    // centred in it (blended back to the normal framing while zoomed in on a single block)
+    const bw = Math.max(1, W - _inset.l - _inset.r), bh = Math.max(1, H - _inset.t - _inset.b);
     const b = levelScreenBounds();
-    const fitF = Math.max((b.u1 - b.u0) * 1.06 / a, (b.v1 - b.v0) * 1.1 * H / band);
+    const fitF = Math.max((b.u1 - b.u0) * 1.03 * H / bw, (b.v1 - b.v0) * 1.05 * H / bh);
     f = _camF * fitF / _levelFrustumDefault;
     const w = Math.min(1, Math.max(0, (_camF - FRUSTUM_ZOOM_IN) / (_levelFrustumDefault - FRUSTUM_ZOOM_IN)));
     const tU = (_camLX - _camLZ) / Math.SQRT2, tV = (-_camLX - _camLZ) / Math.sqrt(6);
-    const cU = (b.u0 + b.u1) / 2, cV = (b.v0 + b.v1) / 2;
-    const fitShift = H / 2 - (cV - tV) * H / f - (_viewTop + band / 2);
-    shift  = w * -fitShift + (1 - w) * (_viewLift - _viewTop) / 2;
-    shiftX = w * (cU - tU) * W / (f * a);
+    const cU = (b.u0 + b.u1) / 2, cV = (b.v0 + b.v1) / 2, px = H / f; // px per world unit
+    const fitY = (H / 2 - (cV - tV) * px) - (_inset.t + bh / 2);   // block centre -> band centre
+    const fitX = (W / 2 + (cU - tU) * px) - (_inset.l + bw / 2);
+    shift  = w * fitY + (1 - w) * (_inset.b - _inset.t) / 2;
+    shiftX = w * fitX + (1 - w) * (_inset.r - _inset.l) / 2;
   } else {
     // portrait: zoom out until the grid fits across; also fit it into the space above the tray
     f = _camF * Math.max(1, PORTRAIT_FIT / a) * (H / (H - _viewLift));
@@ -3741,13 +3776,23 @@ var trayMgr = (() => {
   // ‹ › arrows appear only when the cards don't all fit, and page a screenful at a time
   const prevBtn = document.getElementById('tray-prev');
   const nextBtn = document.getElementById('tray-next');
+  const vertical = () => PHONE_LANDSCAPE.matches; // sideways phone: cards stack in a column
   function updateScrolls() {
-    const max = cardsEl.scrollWidth - cardsEl.clientWidth;
+    const v = vertical();
+    const max = v ? cardsEl.scrollHeight - cardsEl.clientHeight : cardsEl.scrollWidth - cardsEl.clientWidth;
+    const pos = v ? cardsEl.scrollTop : cardsEl.scrollLeft;
     _trayEl.classList.toggle('scrolls', max > 2);
-    prevBtn.disabled = cardsEl.scrollLeft <= 1;
-    nextBtn.disabled = cardsEl.scrollLeft >= max - 1;
+    prevBtn.textContent = v ? '▲' : '‹';
+    nextBtn.textContent = v ? '▼' : '›';
+    prevBtn.disabled = pos <= 1;
+    nextBtn.disabled = pos >= max - 1;
   }
   function page(dir) {
+    if (vertical()) {
+      const step = Math.max(cardsEl.clientHeight - 30, 60);
+      cardsEl.scrollBy({ top: dir * step, behavior: 'smooth' });
+      return;
+    }
     const step = Math.max(cardsEl.clientWidth - 40, 80); // keep a sliver of the last card in view
     cardsEl.scrollBy({ left: dir * step, behavior: 'smooth' });
   }
@@ -3758,7 +3803,8 @@ var trayMgr = (() => {
   cardsEl.addEventListener('wheel', e => {
     if (!_trayEl.classList.contains('scrolls')) return;
     e.preventDefault();
-    cardsEl.scrollBy({ left: e.deltaY + e.deltaX });
+    if (vertical()) cardsEl.scrollBy({ top: e.deltaY + e.deltaX });
+    else cardsEl.scrollBy({ left: e.deltaY + e.deltaX });
   }, { passive: false });
   window.addEventListener('resize', () => { updateScrolls(); updateViewLift(); });
 
